@@ -1,30 +1,23 @@
 # Insight Pros
 
-> Insight Pros builds websites, AI agents and connected business tools that help Central Florida businesses handle inquiries and simplify daily work. Insight Pros is a JEMST Consulting company based in St. Petersburg, Florida.
+> Insight Pros helps businesses attract customers, respond to inquiries and manage daily work. We build websites, create marketing content and connect the tools teams use. Insight Pros serves Central Florida businesses, from small businesses to growing teams and larger organizations. Insight Pros is a JEMST Consulting company.
 
-- Address: 7901 4th St N, Suite 300, St. Petersburg, FL 33702, USA
 - Phone: 863-259-3434
 - Email: admin@JEMST-CONSULTING.com
+- Mailing address: 7901 4th St N, Suite 300, St. Petersburg, FL 33702, USA
 - Book a free consultation: https://calendly.com/jemst-consulting-info/30min
-- Area served: Central Florida, including St. Petersburg, Tampa, Clearwater and the wider Tampa Bay area
-- Parent company: JEMST Consulting (some clients and reviews refer to Insight Pros by this name)
+- Area served: Central Florida
 
-## What we build
-- Websites: fast, mobile-friendly websites built to turn visitors into calls, bookings and quote requests.
-- Custom Apps & Integrations: business tools that connect a website, phone, calendar, CRM and forms so information moves without manual copying.
-- AI Voice Agents: inbound and outbound AI phone agents that can answer calls at any hour, book appointments into a calendar and CRM, and follow up on quotes.
-- 2-Way Text & Email AI: two-way text and email conversations, including missed-call text back.
-- AEO, GEO & SEO: work to improve how a business shows up on Google, Google Maps, ChatGPT, Gemini and Perplexity, including citation cleanup.
-- AI Task Automation: follow-ups, scheduling, data entry, inbox sorting and reports handled automatically.
-- Social Media Management: strategy, content and regular posting.
-- Reputation & Reviews: review requests after each job and help responding to reviews.
+## Services
+- Websites and custom applications: website design and development, landing pages, online stores, custom applications, dashboards and internal tools.
+- Digital marketing and search visibility: search engine optimization, answer engine optimization, generative engine optimization, Google Business Profile, directory listings, Google Ads and paid social campaigns.
+- Content and social media: social media strategy and management, website copy, blogs, graphics, photography, video production and campaign content.
+- Customer communication and follow up: call answering, website chat, two-way text and email, missed-call text-back, lead intake, appointment scheduling and follow-up, with handoff to staff based on agreed rules.
+- Business automation and integrations: CRM setup and connections, workflow automation, task routing, data updates, reporting, customer reminders and reputation management.
+- Business consulting and implementation: business and workflow reviews, technology planning, implementation coordination, team training and agreed ongoing support.
 
-## Who we serve
-Dentists, roofers, plumbers, contractors, restaurants and other local service businesses in Central Florida.
-
-## Key facts
-- Insight Pros uses an estimate of about $100 in lost revenue per missed call for many local service businesses. Actual numbers vary by business.
-- SEO helps a website show up in search results; AEO structures content so AI Overviews, featured snippets and voice assistants can quote it; GEO improves the chances that AI assistants like ChatGPT mention a business.
+## How to start
+Book a free consultation or send a project inquiry. Project cost depends on scope, systems and support involved; proposals explain project charges and any recurring fees. Search work does not guarantee rankings or recommendations.
 
 ## Pages
 - Home: https://insightproexperts.com/

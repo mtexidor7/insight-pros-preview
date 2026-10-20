@@ -1,4 +1,4 @@
-// Insight Pros: scroll choreography, interactions and the WebGL core.
+// Insight Pros: scroll choreography, interactions, inquiry form and the WebGL globe.
 const $ = (s, c = document) => c.querySelector(s);
 const $$ = (s, c = document) => [...c.querySelectorAll(s)];
 
@@ -6,8 +6,13 @@ const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const mobileMQ = window.matchMedia("(max-width: 760px)");
 const isMobile = () => mobileMQ.matches;
 const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+const root = document.documentElement;
 
-// Wait for deferred libs (gsap, ScrollTrigger, Lenis)
+// Analytics hook: only reports when an approved analytics system (dataLayer) is present on the page.
+function track(event, data = {}) {
+  if (Array.isArray(window.dataLayer)) window.dataLayer.push({ event, ...data });
+}
+
 function libsReady() {
   return new Promise((resolve) => {
     const check = () => (window.gsap && window.ScrollTrigger ? resolve() : setTimeout(check, 16));
@@ -17,13 +22,15 @@ function libsReady() {
 
 let core = null;
 let lenis = null;
+let marqueeLoop = null;
+const motionListeners = [];
+const motionPaused = () => root.classList.contains("motion-paused");
 
 async function boot() {
   await libsReady();
   const { gsap, ScrollTrigger } = window;
   gsap.registerPlugin(ScrollTrigger);
 
-  // ---------------------------------------------------------------- WebGL core
   if (!reduced) {
     try {
       const { createCore } = await import("./core.js");
@@ -32,33 +39,35 @@ async function boot() {
       core = null;
     }
   }
-  if (!core) document.documentElement.classList.add("no-webgl");
+  if (!core) root.classList.add("no-webgl");
 
-  // ---------------------------------------------------------------- Smooth scroll
   if (!reduced && window.Lenis) {
-    lenis = new window.Lenis({ duration: 1.15, easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), smoothWheel: true });
+    lenis = new window.Lenis({ duration: 1.1, easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), smoothWheel: true });
     lenis.on("scroll", ScrollTrigger.update);
     gsap.ticker.add((time) => lenis.raf(time * 1000));
     gsap.ticker.lagSmoothing(0);
     lenis.stop();
   }
 
-  setupNav(gsap);
+  setupNav(gsap, ScrollTrigger);
   setupCursor(gsap);
-  setupManifesto(ScrollTrigger);
-  setupLeak(gsap, ScrollTrigger);
+  setupServiceLinks();
+  setupChatDemo();
+  setupDashboard();
   setupVoice(gsap, ScrollTrigger);
-  setupAnswer(gsap, ScrollTrigger);
-  setupServices(gsap, ScrollTrigger);
-  setupProof(gsap, ScrollTrigger);
-  setupProcess(gsap, ScrollTrigger);
+  setupEstimate();
+  setupSearch(gsap);
+  setupProcess(gsap);
   setupLazyVideos();
-  setupReveals(gsap, ScrollTrigger);
+  setupReveals(gsap);
   setupScenes(gsap, ScrollTrigger);
   setupMarquee(gsap);
+  setupForm();
+  setupMotionToggle();
+  $$("[data-track]").forEach((el) => el.addEventListener("click", () => track(el.dataset.track, { location: el.closest("section")?.id || "nav" })));
 
   await runLoader(gsap);
-  heroIntro(gsap, ScrollTrigger);
+  heroIntro(gsap);
   lenis && lenis.start();
   window.__insight = { lenis, core };
   ScrollTrigger.refresh();
@@ -69,64 +78,46 @@ async function boot() {
 function runLoader(gsap) {
   return new Promise((resolve) => {
     const loader = $(".loader");
-    const out = $("[data-count]");
+    const bar = $("[data-count-bar]");
     const finish = () => {
       document.body.classList.remove("is-loading");
       loader.classList.add("is-done");
-      gsap.to(loader, {
-        clipPath: "inset(0 0 100% 0)",
-        duration: reduced ? 0.01 : 1.1,
-        ease: "expo.inOut",
-        onComplete: () => { loader.remove(); },
-      });
-      setTimeout(resolve, reduced ? 0 : 450);
+      gsap.to(loader, { autoAlpha: 0, duration: reduced ? 0.01 : 0.6, ease: "power2.out", onComplete: () => loader.remove() });
+      setTimeout(resolve, reduced ? 0 : 250);
     };
     if (reduced) return finish();
-    gsap.set(loader, { clipPath: "inset(0 0 0% 0)" });
-    const counter = { v: 0 };
     const loaded = new Promise((r) => (document.readyState === "complete" ? r() : window.addEventListener("load", r, { once: true })));
-    const cap = new Promise((r) => setTimeout(r, 3500));
-    gsap.to(counter, {
-      v: 86, duration: 1.1, ease: "power2.out",
-      onUpdate: () => (out.textContent = String(Math.round(counter.v)).padStart(3, "0")),
-    });
-    Promise.race([loaded, cap]).then(() => {
-      gsap.to(counter, {
-        v: 100, duration: 0.45, delay: 0.6, ease: "power2.inOut",
-        onUpdate: () => (out.textContent = String(Math.round(counter.v)).padStart(3, "0")),
-        onComplete: finish,
-      });
-    });
+    const cap = new Promise((r) => setTimeout(r, 3000));
+    gsap.to(bar, { scaleX: 0.85, duration: 1, ease: "power2.out" });
+    Promise.race([loaded, cap]).then(() => gsap.to(bar, { scaleX: 1, duration: 0.35, ease: "power2.inOut", onComplete: finish }));
   });
 }
 
-function heroIntro(gsap, ScrollTrigger) {
-  const lines = $$(".hero__title .line__in");
-  const ups = $$(".hero .reveal-up");
+function heroIntro(gsap) {
   if (reduced) return;
-  gsap.from(lines, { yPercent: 110, rotate: 3, duration: 1.3, ease: "expo.out", stagger: 0.09 });
-  gsap.from(ups, { y: 26, opacity: 0, duration: 1.1, ease: "expo.out", stagger: 0.08, delay: 0.35 });
-  gsap.from(".nav > *", { y: -30, opacity: 0, duration: 1, ease: "expo.out", delay: 0.4 });
-  if (core) gsap.from(core.state, { scale: 0.2, alpha: 0, duration: 2.2, ease: "expo.out" });
-
-  // scroll-out: lines slide apart like a lens pulling focus
-  const tl = gsap.timeline({ scrollTrigger: { trigger: ".hero", start: "top top", end: "bottom top", scrub: 0.6 } });
-  lines.forEach((el, i) => tl.to(el, { xPercent: i % 2 ? 22 : -18, ease: "none" }, 0));
-  tl.to(".hero__foot, .kicker", { y: -60, opacity: 0, ease: "none" }, 0);
+  const lines = $$(".hero__title .line__in");
+  gsap.from(lines, { yPercent: 110, duration: 1.1, ease: "expo.out", stagger: 0.08 });
+  gsap.from(".hero .reveal-up", { y: 22, opacity: 0, duration: 0.9, ease: "expo.out", stagger: 0.07, delay: 0.25 });
+  gsap.from(".nav > *", { y: -24, opacity: 0, duration: 0.9, ease: "expo.out", delay: 0.3 });
+  if (core) gsap.from(core.state, { scale: 0.2, alpha: 0, duration: 2, ease: "expo.out" });
 }
 
 // ================================================================== Nav + menu
-function setupNav(gsap) {
+function setupNav(gsap, ScrollTrigger) {
   const nav = $(".nav");
   const btn = $(".menu-btn");
-  const root = document.documentElement;
   const toggle = (open) => {
     const isOpen = open ?? !root.classList.contains("menu-open");
     root.classList.toggle("menu-open", isOpen);
     btn.setAttribute("aria-expanded", String(isOpen));
     btn.setAttribute("aria-label", isOpen ? "Close menu" : "Open menu");
     if (lenis) isOpen ? lenis.stop() : lenis.start();
-    if (isOpen && !reduced) gsap.from(".menu__links li", { y: 40, opacity: 0, duration: 0.8, ease: "expo.out", stagger: 0.05, delay: 0.25 });
+    if (isOpen) {
+      if (!reduced) gsap.from(".menu__links li", { y: 30, opacity: 0, duration: 0.6, ease: "expo.out", stagger: 0.05, delay: 0.2 });
+      setTimeout(() => $(".menu__links a")?.focus(), 250);
+    } else {
+      btn.focus();
+    }
   };
   btn.addEventListener("click", () => toggle());
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && root.classList.contains("menu-open")) toggle(false); });
@@ -135,31 +126,46 @@ function setupNav(gsap) {
   $$('a[href^="#"]').forEach((a) => {
     a.addEventListener("click", (e) => {
       const id = a.getAttribute("href");
+      if (id === "#") return;
       const target = id === "#top" ? 0 : $(id);
       if (target === null) return;
       e.preventDefault();
       if (root.classList.contains("menu-open")) toggle(false);
-      if (lenis) lenis.scrollTo(target, { offset: 0, duration: 1.6 });
-      else window.scrollTo({ top: target === 0 ? 0 : target.getBoundingClientRect().top + window.scrollY, behavior: reduced ? "auto" : "smooth" });
+      if (target !== 0 && target.tagName === "DETAILS") target.open = true;
+      if (lenis) lenis.scrollTo(target, { offset: target === 0 ? 0 : -10, duration: reduced ? 0 : 1.4 });
+      else window.scrollTo({ top: target === 0 ? 0 : target.getBoundingClientRect().top + window.scrollY - 60, behavior: reduced ? "auto" : "smooth" });
+      history.replaceState(null, "", id === "#top" ? location.pathname : id);
     });
   });
 
-  // hide on scroll down, reveal on scroll up
+  // hide on scroll down, reveal on scroll up; solid background once scrolled
   let last = 0;
   const onScroll = (y) => {
+    nav.classList.toggle("is-scrolled", y > 40);
     if (root.classList.contains("menu-open")) return;
-    const down = y > last && y > 200;
-    nav.classList.toggle("is-hidden", down);
+    nav.classList.toggle("is-hidden", y > last && y > 300);
     last = y;
   };
   if (lenis) lenis.on("scroll", ({ scroll }) => onScroll(scroll));
   else window.addEventListener("scroll", () => onScroll(window.scrollY), { passive: true });
+
+  // active section in the desktop nav
+  const links = $$(".nav__links a");
+  links.forEach((link) => {
+    const sec = $(link.getAttribute("href"));
+    if (!sec) return;
+    const ends = link.getAttribute("href") === "#work" ? $("#estimate") : sec;
+    ScrollTrigger.create({
+      trigger: sec, endTrigger: ends, start: "top 40%", end: "bottom 40%",
+      onToggle: (self) => { link.classList.toggle("is-active", self.isActive); if (self.isActive) link.setAttribute("aria-current", "true"); else link.removeAttribute("aria-current"); },
+    });
+  });
 }
 
 // ================================================================== Cursor + magnetic
 function setupCursor(gsap) {
   if (!finePointer || reduced) return;
-  document.documentElement.classList.add("has-cursor");
+  root.classList.add("has-cursor");
   const cur = $(".cursor");
   const label = $(".cursor__label");
   const dotX = gsap.quickTo(".cursor__dot", "x", { duration: 0.12, ease: "power3" });
@@ -167,78 +173,81 @@ function setupCursor(gsap) {
   const ringX = gsap.quickTo(".cursor__ring", "x", { duration: 0.45, ease: "power3" });
   const ringY = gsap.quickTo(".cursor__ring", "y", { duration: 0.45, ease: "power3" });
   window.addEventListener("pointermove", (e) => { dotX(e.clientX); dotY(e.clientY); ringX(e.clientX); ringY(e.clientY); }, { passive: true });
-
   $$("[data-cursor]").forEach((el) => {
     el.addEventListener("pointerenter", () => { label.textContent = el.dataset.cursor; cur.classList.add("is-hover"); });
     el.addEventListener("pointerleave", () => cur.classList.remove("is-hover"));
   });
-
   $$(".magnetic").forEach((el) => {
     const xTo = gsap.quickTo(el, "x", { duration: 0.6, ease: "elastic.out(1, 0.4)" });
     const yTo = gsap.quickTo(el, "y", { duration: 0.6, ease: "elastic.out(1, 0.4)" });
     el.addEventListener("pointermove", (e) => {
       const r = el.getBoundingClientRect();
-      xTo((e.clientX - r.left - r.width / 2) * 0.25);
-      yTo((e.clientY - r.top - r.height / 2) * 0.3);
+      xTo((e.clientX - r.left - r.width / 2) * 0.2);
+      yTo((e.clientY - r.top - r.height / 2) * 0.25);
     });
     el.addEventListener("pointerleave", () => { xTo(0); yTo(0); });
   });
 }
 
-// ================================================================== Manifesto word fill
-function splitWords(root) {
-  const walk = (node) => {
-    [...node.childNodes].forEach((child) => {
-      if (child.nodeType === 3) {
-        const frag = document.createDocumentFragment();
-        child.textContent.split(/(\s+)/).forEach((part) => {
-          if (!part) return;
-          if (/^\s+$/.test(part)) frag.appendChild(document.createTextNode(part));
-          else { const s = document.createElement("span"); s.className = "w"; s.textContent = part; frag.appendChild(s); }
-        });
-        child.replaceWith(frag);
-      } else if (child.nodeType === 1) walk(child);
+// ================================================================== Service CTAs pre-select the inquiry topic
+function setupServiceLinks() {
+  const select = $("#f-service");
+  $$("[data-service]").forEach((a) => {
+    a.addEventListener("click", () => {
+      select.value = a.dataset.service;
+      select.removeAttribute("aria-invalid");
+      $("#f-service-err").textContent = "";
     });
-  };
-  walk(root);
-  return $$(".w", root);
-}
-
-function setupManifesto(ScrollTrigger) {
-  const el = $("[data-fill]");
-  const words = splitWords(el);
-  if (reduced) { words.forEach((w) => w.classList.add("is-on")); return; }
-  ScrollTrigger.create({
-    trigger: el, start: "top 80%", end: "bottom 45%", scrub: true,
-    onUpdate: (self) => {
-      const n = Math.round(self.progress * words.length);
-      words.forEach((w, i) => w.classList.toggle("is-on", i < n));
-    },
   });
 }
 
-// ================================================================== Missed-call calculator
-function setupLeak(gsap, ScrollTrigger) {
-  const input = $("#calls");
-  const out = $("[data-calls-out]");
-  const loss = $("[data-loss]");
-  const val = { v: 0 };
-  const fmt = (n) => Math.round(n).toLocaleString("en-US");
-  const render = (animate = true) => {
-    const n = +input.value;
-    out.textContent = n;
-    input.style.setProperty("--p", ((n - +input.min) / (+input.max - +input.min)) * 100 + "%");
-    const target = n * 100 * 52;
-    gsap.to(val, { v: target, duration: animate && !reduced ? 0.8 : 0, ease: "power3.out", onUpdate: () => (loss.textContent = fmt(val.v)) });
-    if (core) gsap.fromTo(core.state, { pulse: 1.2 }, { pulse: 0, duration: 1.2, ease: "power2.out" });
+// ================================================================== Communication demo: one message and one caption at a time
+function setupChatDemo() {
+  const box = $("[data-chat]");
+  if (!box) return;
+  const msgs = $$(".chat__msg", box);
+  const cap = $("[data-chat-caption]", box);
+  const captions = ["A customer asks a question", "Details are requested", "The customer shares the details", "An appointment is requested", "The team takes over"];
+  let i = -1, timer = null, inView = false;
+  const show = (n) => {
+    i = n % msgs.length;
+    msgs.forEach((m, k) => m.classList.toggle("is-shown", k <= i));
+    cap.textContent = captions[i];
   };
-  input.addEventListener("input", () => render());
-  input.style.setProperty("--p", ((+input.value - 1) / 39) * 100 + "%");
-  loss.textContent = "0";
-  ScrollTrigger.create({ trigger: ".leak", start: "top 70%", once: true, onEnter: () => render() });
+  if (reduced) { show(msgs.length - 1); cap.textContent = "Sample conversation"; return; }
+  const run = () => {
+    clearInterval(timer);
+    if (!inView || motionPaused()) return;
+    timer = setInterval(() => show(i + 1 >= msgs.length ? 0 : i + 1), 2200);
+  };
+  show(0);
+  new IntersectionObserver(([e]) => { inView = e.isIntersecting; run(); }, { threshold: 0.4 }).observe(box);
+  motionListeners.push((paused) => { if (paused) { clearInterval(timer); show(msgs.length - 1); } else run(); });
 }
 
-// ================================================================== Voice film (scroll-scrubbed video)
+// ================================================================== Dashboard demo: status tabs
+function setupDashboard() {
+  const tabs = $$(".dash__tabs [role=tab]");
+  const rows = $$(".dash__rows li");
+  const select = (tab) => {
+    tabs.forEach((t) => { const on = t === tab; t.setAttribute("aria-selected", String(on)); t.tabIndex = on ? 0 : -1; });
+    const f = tab.dataset.filter;
+    rows.forEach((r) => (r.hidden = f !== "all" && r.dataset.status !== f));
+  };
+  tabs.forEach((t, k) => {
+    t.tabIndex = k === 0 ? 0 : -1;
+    t.addEventListener("click", () => select(t));
+    t.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      e.preventDefault();
+      const n = tabs[(k + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
+      n.focus(); select(n);
+    });
+  });
+  $("[data-focus-dash]")?.addEventListener("click", () => setTimeout(() => tabs[1]?.focus({ preventScroll: true }), 600));
+}
+
+// ================================================================== Walkthrough film (scroll-scrubbed), one caption at a time
 function setupVoice(gsap, ScrollTrigger) {
   const section = $(".voice");
   const video = $(".voice__video");
@@ -246,31 +255,20 @@ function setupVoice(gsap, ScrollTrigger) {
   const bar = $(".voice__progress i");
   video.src = isMobile() ? "assets/video/voice-m.mp4" : "assets/video/voice.mp4";
   video.load();
-
-  // iOS needs a user gesture before seeking paints frames
-  const prime = () => {
-    const p = video.play();
-    if (p && p.then) p.then(() => video.pause()).catch(() => {});
-    window.removeEventListener("touchstart", prime);
-  };
+  const prime = () => { const p = video.play(); if (p && p.then) p.then(() => video.pause()).catch(() => {}); };
   window.addEventListener("touchstart", prime, { passive: true, once: true });
-
   if (reduced) return;
 
-  let target = 0;
-  let current = 0;
-  let active = -1;
+  let target = 0, current = 0, active = -1;
   const setStep = (i) => {
     if (i === active) return;
     steps.forEach((s, k) => {
-      // outgoing caption clears first; incoming waits so the two never overlap
-      if (k === i) gsap.to(s, { opacity: 1, y: 0, duration: 0.6, delay: active === -1 ? 0 : 0.28, ease: "expo.out", overwrite: true });
-      else gsap.to(s, { opacity: 0, y: k < i ? -24 : 24, duration: 0.25, ease: "power2.in", overwrite: true });
+      if (k === i) gsap.to(s, { opacity: 1, y: 0, duration: 0.5, delay: active === -1 ? 0 : 0.28, ease: "expo.out", overwrite: true });
+      else gsap.to(s, { opacity: 0, y: k < i ? -20 : 20, duration: 0.25, ease: "power2.in", overwrite: true });
     });
     active = i;
   };
   setStep(0);
-
   ScrollTrigger.create({
     trigger: section, start: "top top", end: "bottom bottom", scrub: true,
     onUpdate: (self) => {
@@ -279,178 +277,83 @@ function setupVoice(gsap, ScrollTrigger) {
       setStep(Math.min(steps.length - 1, Math.floor(self.progress * steps.length * 0.999)));
     },
   });
-
-  // smooth the seek on the ticker
   gsap.ticker.add(() => {
     if (!video.duration) return;
     current += (target - current) * 0.12;
     const t = current * (video.duration - 0.05);
-    if (Math.abs(video.currentTime - t) > 0.01) {
-      try { video.currentTime = t; } catch (e) {}
-    }
-  });
-
-  gsap.from(".voice__head > *", {
-    y: 40, opacity: 0, duration: 1, ease: "expo.out", stagger: 0.1,
-    scrollTrigger: { trigger: section, start: "top 60%" },
+    if (Math.abs(video.currentTime - t) > 0.01) { try { video.currentTime = t; } catch (e) {} }
   });
 }
 
-// ================================================================== Answer engines: noise converging into one answer
-function setupAnswer(gsap, ScrollTrigger) {
+// ================================================================== Illustrative estimate
+function setupEstimate() {
+  const calls = $("#est-calls"), qual = $("#est-qual"), conv = $("#est-conv"), sale = $("#est-sale");
+  const out = $("[data-est-year]");
+  const fill = (el) => el.style.setProperty("--p", ((el.value - el.min) / (el.max - el.min)) * 100 + "%");
+  const render = () => {
+    [calls, qual, conv].forEach(fill);
+    $("[data-out=calls]").textContent = calls.value;
+    $("[data-out=qual]").textContent = qual.value + "%";
+    $("[data-out=conv]").textContent = conv.value + "%";
+    const value = Math.max(0, parseFloat(sale.value) || 0);
+    const year = calls.value * 52 * (qual.value / 100) * (conv.value / 100) * value;
+    out.textContent = Math.round(year).toLocaleString("en-US");
+  };
+  [calls, qual, conv, sale].forEach((el) => el.addEventListener("input", render));
+  render();
+}
+
+// ================================================================== Search visibility: scattered queries resolve into one clear answer
+function setupSearch(gsap) {
   const wrap = $(".queries");
   const chips = $$(".q", wrap);
   const card = $(".answer-card");
   const place = () => {
-    const w = wrap.clientWidth;
-    const h = wrap.clientHeight;
+    const w = wrap.clientWidth, h = wrap.clientHeight;
     const cols = isMobile() ? 1 : 2;
     const rows = Math.ceil(chips.length / cols);
     chips.forEach((c, i) => {
-      const col = i % cols;
-      const row = Math.floor(i / cols);
+      const col = i % cols, row = Math.floor(i / cols);
       const free = Math.max(0, w - c.offsetWidth);
-      const x = cols === 1
-        ? free * [0.05, 0.6, 0.25, 0.85, 0.1, 0.5, 0.3, 0.75][i % 8]
-        : col * (w / 2) + ((row % 2) ? w * 0.12 : 0) + (i * 37 % 40);
-      const y = (row / rows) * (h - 40) + (cols === 1 ? 0 : (i * 13) % 14);
+      const x = cols === 1 ? free * [0.05, 0.6, 0.25, 0.85, 0.1, 0.5, 0.3, 0.75][i % 8] : col * (w / 2) + (row % 2 ? w * 0.12 : 0) + ((i * 37) % 40);
       c.style.left = Math.min(Math.max(0, x), free) + "px";
-      c.style.top = y + "px";
-      c.style.animation = `chipfloat ${5 + (i % 4)}s ease-in-out ${-i * 0.7}s infinite alternate`;
+      c.style.top = (row / rows) * (h - 40) + "px";
+      if (!reduced) c.style.animation = `chipfloat ${5 + (i % 4)}s ease-in-out ${-i * 0.7}s infinite alternate`;
     });
   };
   place();
   window.addEventListener("resize", place);
-
   if (reduced) return;
-
-  const tl = gsap.timeline({ scrollTrigger: { trigger: ".answer__stage", start: "top 70%", end: "bottom 25%", scrub: 1, invalidateOnRefresh: true } });
-  tl.to({}, { duration: 0.35 });
+  const tl = gsap.timeline({ scrollTrigger: { trigger: ".answer__stage", start: "top 70%", end: "bottom 30%", scrub: 1, invalidateOnRefresh: true } });
+  tl.to({}, { duration: 0.3 });
   chips.forEach((c, i) => {
     tl.to(c, {
-      x: () => {
-        const cr = card.getBoundingClientRect(), r = c.getBoundingClientRect();
-        return cr.left + cr.width / 2 - (r.left - (gsap.getProperty(c, "x") || 0) + r.width / 2);
-      },
-      y: () => {
-        const cr = card.getBoundingClientRect(), r = c.getBoundingClientRect();
-        return cr.top + cr.height / 2 - (r.top - (gsap.getProperty(c, "y") || 0) + r.height / 2);
-      },
+      x: () => { const cr = card.getBoundingClientRect(), r = c.getBoundingClientRect(); return cr.left + cr.width / 2 - (r.left - (gsap.getProperty(c, "x") || 0) + r.width / 2); },
+      y: () => { const cr = card.getBoundingClientRect(), r = c.getBoundingClientRect(); return cr.top + cr.height / 2 - (r.top - (gsap.getProperty(c, "y") || 0) + r.height / 2); },
       scale: 0.3, opacity: 0, ease: "power2.in",
-    }, 0.35 + i * 0.06);
+    }, 0.3 + i * 0.05);
   });
-  tl.fromTo(card, { opacity: 0.15, scale: 0.94, filter: "blur(6px)" }, { opacity: 1, scale: 1, filter: "blur(0px)", ease: "power2.out", duration: 0.5 }, 0.75);
-
-  gsap.from(".answer .display span", {
-    yPercent: 60, opacity: 0, duration: 1.2, ease: "expo.out", stagger: 0.12,
-    scrollTrigger: { trigger: ".answer", start: "top 70%" },
-  });
-}
-
-// ================================================================== Services
-function setupServices(gsap, ScrollTrigger) {
-  const items = $$(".svc__item");
-  const float = $(".svc__float");
-  const img = $("img", float);
-  items.forEach((item) => {
-    const btn = $(".svc__row", item);
-    btn.addEventListener("click", () => {
-      const open = !item.classList.contains("is-open");
-      items.forEach((o) => { o.classList.remove("is-open"); $(".svc__row", o).setAttribute("aria-expanded", "false"); });
-      item.classList.toggle("is-open", open);
-      btn.setAttribute("aria-expanded", String(open));
-      setTimeout(() => ScrollTrigger.refresh(), 600);
-    });
-    if (finePointer) {
-      btn.addEventListener("pointerenter", () => { img.src = item.dataset.img; float.classList.add("is-on"); });
-      btn.addEventListener("pointerleave", () => float.classList.remove("is-on"));
-    }
-  });
-  if (finePointer) {
-    const xTo = gsap.quickTo(float, "x", { duration: 0.6, ease: "power3" });
-    const yTo = gsap.quickTo(float, "y", { duration: 0.6, ease: "power3" });
-    // preview lives in a fixed lane on the right (left of the +/- buttons) and only tracks vertically
-    const laneX = () => window.innerWidth - 260 - 44 - Math.max(16, Math.min(56, window.innerWidth * 0.04)) - 24;
-    window.addEventListener("pointermove", (e) => {
-      xTo(laneX());
-      yTo(Math.min(Math.max(e.clientY - 160, 90), window.innerHeight - 350));
-    }, { passive: true });
-  }
-  // preload the preview images once services are near
-  ScrollTrigger.create({ trigger: ".services", start: "top bottom", once: true, onEnter: () => items.forEach((i) => { const im = new Image(); im.src = i.dataset.img; }) });
-
-  if (!reduced) {
-    gsap.from(".svc__item", {
-      y: 50, opacity: 0, duration: 1, ease: "expo.out", stagger: 0.07,
-      scrollTrigger: { trigger: ".svc", start: "top 80%" },
-    });
-  }
-}
-
-// ================================================================== Proof field + testimonials
-function setupProof(gsap, ScrollTrigger) {
-  if (!reduced) {
-    $$(".ph").forEach((ph) => {
-      const speed = parseFloat(ph.dataset.speed || 0);
-      gsap.fromTo(ph, { y: () => -speed * 300 }, {
-        y: () => speed * 300, ease: "none",
-        scrollTrigger: { trigger: ".proof", start: "top bottom", end: "bottom top", scrub: true, invalidateOnRefresh: true },
-      });
-      gsap.from($("img", ph), { scale: 1.25, opacity: 0, duration: 1.4, ease: "expo.out", scrollTrigger: { trigger: ph, start: "top 95%" } });
-    });
-  }
-
-  const quotes = $$(".quote");
-  const idx = $("[data-qi]");
-  let i = 0;
-  let timer;
-  const show = (n) => {
-    i = (n + quotes.length) % quotes.length;
-    quotes.forEach((q, k) => q.classList.toggle("is-active", k === i));
-    idx.textContent = String(i + 1).padStart(2, "0");
-  };
-  const auto = () => { clearInterval(timer); if (!reduced) timer = setInterval(() => show(i + 1), 8000); };
-  $$(".qbtn").forEach((b) => b.addEventListener("click", () => { show(i + +b.dataset.dir); auto(); }));
-  const box = $(".quotes");
-  box.addEventListener("pointerenter", () => clearInterval(timer));
-  box.addEventListener("pointerleave", auto);
-  box.addEventListener("focusin", () => clearInterval(timer));
-  auto();
+  tl.fromTo(card, { opacity: 0.25, scale: 0.95 }, { opacity: 1, scale: 1, ease: "power2.out", duration: 0.4 }, 0.6);
 }
 
 // ================================================================== Process: horizontal track on desktop
-function setupProcess(gsap, ScrollTrigger) {
+function setupProcess(gsap) {
   if (reduced) return;
   const mm = gsap.matchMedia();
   mm.add("(min-width: 761px)", () => {
     const track = $(".track");
     const dist = () => Math.max(0, track.scrollWidth - window.innerWidth);
-    gsap.to(track, {
-      x: () => -dist(), ease: "none",
-      scrollTrigger: { trigger: ".process__pin", start: "top top", end: () => "+=" + dist(), pin: true, scrub: 1, invalidateOnRefresh: true },
-    });
-  });
-  mm.add("(max-width: 760px)", () => {
-    $$(".card").forEach((c) => gsap.from(c, { y: 60, opacity: 0, duration: 1, ease: "expo.out", scrollTrigger: { trigger: c, start: "top 88%" } }));
+    gsap.to(track, { x: () => -dist(), ease: "none", scrollTrigger: { trigger: ".process__pin", start: "top top", end: () => "+=" + dist(), pin: true, scrub: 1, invalidateOnRefresh: true } });
   });
 }
 
-// ================================================================== Generic reveals
-function setupReveals(gsap, ScrollTrigger) {
+// ================================================================== Reveals: whole blocks, quickly reach full opacity
+function setupReveals(gsap) {
   if (reduced) return;
-  $$(".leak .label, .leak__big, .leak__copy > *, .services__head > *, .process__head > *, .faq__head > *, .proof__inner > .label, .proof__lede, .defs .def, .principles").forEach((el) => {
-    gsap.from(el, { y: 44, opacity: 0, duration: 1.1, ease: "expo.out", scrollTrigger: { trigger: el, start: "top 88%" } });
+  const blocks = ".problems .label, .problems .h2, .pcard, .problems__close, .services__head > *, .scard, .audience .label, .audience .h2, .acard, .audience__line, .work .label, .work .h2, .work__intro, .wcard, .estimate .label, .estimate .h2, .estimate__copy, .calc, .about .label, .about .h2, .about__copy, .quote, .process__head > *, .answer .label, .answer .h2, .answer__copy, .faq__head > *, details, .contact__intro > *, .inquiry";
+  $$(blocks).forEach((el) => {
+    gsap.from(el, { y: 28, opacity: 0, duration: 0.7, ease: "power3.out", scrollTrigger: { trigger: el, start: "top 90%", once: true } });
   });
-  gsap.from("details", { y: 30, opacity: 0, duration: 0.9, ease: "expo.out", stagger: 0.06, scrollTrigger: { trigger: ".faq__list", start: "top 85%" } });
-  gsap.from(".proof .display span", { yPercent: 50, opacity: 0, duration: 1.2, ease: "expo.out", stagger: 0.12, scrollTrigger: { trigger: ".proof .display", start: "top 85%" } });
-  gsap.from(".quotes", { y: 60, opacity: 0, duration: 1.2, ease: "expo.out", scrollTrigger: { trigger: ".quotes", start: "top 90%" } });
-
-  // CTA lines rise
-  gsap.from(".cta__title .line__in", { yPercent: 110, duration: 1.3, ease: "expo.out", stagger: 0.1, scrollTrigger: { trigger: ".cta", start: "top 55%" } });
-  gsap.from(".cta__btn, .cta__contact a, .cta .label", { y: 30, opacity: 0, duration: 1, ease: "expo.out", stagger: 0.07, scrollTrigger: { trigger: ".cta", start: "top 45%" } });
-
-  // footer wordmark draws in
-  gsap.from(".footer__big", { yPercent: 40, opacity: 0, duration: 1.4, ease: "expo.out", scrollTrigger: { trigger: ".footer", start: "top 95%" } });
 }
 
 // ================================================================== Lazy loop videos
@@ -459,80 +362,163 @@ function setupLazyVideos() {
   const load = (v) => {
     if (v.dataset.loaded) return;
     const srcs = $$("source", v);
-    const pick = isMobile() ? srcs[0] : srcs[1] || srcs[0];
-    v.src = pick.dataset.src;
+    v.src = (isMobile() ? srcs[0] : srcs[1] || srcs[0]).dataset.src;
     v.dataset.loaded = "1";
   };
   const io = new IntersectionObserver((entries) => {
     entries.forEach((e) => {
       const v = e.target;
-      if (e.isIntersecting) {
-        load(v);
-        if (!reduced) v.play().catch(() => {});
-      } else if (v.dataset.loaded) v.pause();
+      v._inView = e.isIntersecting;
+      if (e.isIntersecting) { load(v); if (!reduced && !motionPaused()) v.play().catch(() => {}); }
+      else if (v.dataset.loaded) v.pause();
     });
   }, { rootMargin: "300px 0px" });
   vids.forEach((v) => io.observe(v));
+  motionListeners.push((paused) => vids.forEach((v) => { if (paused) v.pause(); else if (v._inView && v.dataset.loaded) v.play().catch(() => {}); }));
 }
 
 // ================================================================== Marquee
 function setupMarquee(gsap) {
-  const track = $(".marquee__track");
   if (reduced) return;
-  const loop = gsap.to(track, { xPercent: -50, duration: 22, ease: "none", repeat: -1 });
-  if (lenis) {
-    lenis.on("scroll", ({ velocity }) => {
-      const v = Math.min(4, Math.abs(velocity) * 0.18);
-      gsap.to(loop, { timeScale: (velocity < 0 ? -1 : 1) * (1 + v), duration: 0.3, overwrite: true });
-    });
-  }
+  marqueeLoop = gsap.to(".marquee__track", { xPercent: -50, duration: 30, ease: "none", repeat: -1 });
+  motionListeners.push((paused) => (paused ? marqueeLoop.pause() : marqueeLoop.play()));
 }
 
-// ================================================================== Core choreography per section
+// ================================================================== Globe choreography per section
 function setupScenes(gsap, ScrollTrigger) {
   if (!core) return;
   const m = isMobile();
   const S = {
-    hero: { morph: 0, x: m ? 0.4 : 2.4, y: m ? 1.3 : 0.15, scale: m ? 1.05 : 1, alpha: 1 },
-    manifesto: { morph: 0, x: 0, y: 0, scale: 1.75, alpha: 0.32 },
-    leak: { morph: 1, x: 0, y: m ? 2.6 : -0.4, scale: m ? 0.55 : 1, alpha: 0.6 },
-    voice: { morph: 1, x: 0, y: 0, scale: 1, alpha: 0 },
-    answer: { morph: 2, x: 0, y: m ? -1 : -0.2, scale: m ? 0.7 : 1, alpha: 0.6 },
-    services: { morph: 2, x: 0, y: 0, scale: 1, alpha: 0 },
-    proof: { morph: 0, x: 0, y: 0, scale: m ? 1 : 1.25, alpha: 0.32 },
+    hero: { morph: 0, x: m ? 0.4 : 2.6, y: m ? 1.4 : 0.2, scale: m ? 1.0 : 1, alpha: 1 },
+    problems: { morph: 0, x: m ? 0 : 3.2, y: 0, scale: 1.3, alpha: 0.35 },
+    services: { morph: 0, x: 0, y: 0, scale: 1, alpha: 0 },
+    audience: { morph: 3, x: m ? 0 : -3.4, y: 0.4, scale: 0.8, alpha: 0.35 },
+    work: { morph: 1, x: 0, y: m ? 2.4 : -1.6, scale: m ? 0.6 : 1, alpha: 0.4 },
+    walkthrough: { morph: 1, x: 0, y: 0, scale: 1, alpha: 0 },
+    estimate: { morph: 1, x: 0, y: m ? 2.6 : -0.4, scale: m ? 0.55 : 1, alpha: 0.5 },
+    about: { morph: 0, x: m ? 0 : -3.2, y: 0, scale: 1.1, alpha: 0.3 },
     process: { morph: 3, x: m ? 0 : 3, y: m ? 2.2 : 0.4, scale: m ? 0.6 : 0.9, alpha: 0.5 },
+    search: { morph: 2, x: 0, y: m ? -1 : -0.2, scale: m ? 0.7 : 1, alpha: 0.55 },
     faq: { morph: 3, x: m ? 0 : -3.6, y: 0, scale: 0.75, alpha: 0.28 },
-    contact: { morph: 3, x: 0, y: m ? 1 : 0, scale: m ? 0.85 : 1.25, alpha: 0.4 },
+    contact: { morph: 3, x: m ? 0 : 3.4, y: m ? 1 : 0, scale: m ? 0.8 : 1, alpha: 0.35 },
   };
-  const map = [
-    [".hero", "hero"], [".manifesto", "manifesto"], [".leak", "leak"], [".voice", "voice"],
-    [".answer", "answer"], [".services", "services"], [".proof", "proof"], [".process", "process"],
-    [".faq", "faq"], [".cta", "contact"],
-  ];
-  const stage = $(".stage");
-  const nav = $(".nav");
-  const cursor = $(".cursor");
-  let hideTimer;
-  const go = (key) => {
+  const map = [["#top", "hero"], ["#problems", "problems"], ["#services", "services"], ["#audience", "audience"], ["#work", "work"], ["#walkthrough", "walkthrough"], ["#estimate", "estimate"], ["#about", "about"], ["#process", "process"], ["#search", "search"], ["#faq", "faq"], ["#contact", "contact"]];
+  const stage = $(".stage"), nav = $(".nav"), cursor = $(".cursor");
+  let hideTimer, lastKey = "hero";
+  const apply = (key) => {
+    lastKey = key;
     const s = S[key];
-    gsap.to(core.state, { morph: s.morph, x: s.x, y: s.y, scale: s.scale, alpha: s.alpha, duration: 1.8, ease: "expo.inOut", overwrite: "auto" });
-    const hidden = s.alpha === 0;
-    stage.classList.toggle("is-hidden", hidden);
+    gsap.to(core.state, { morph: s.morph, x: s.x, y: s.y, scale: s.scale, alpha: s.alpha, duration: 1.6, ease: "expo.inOut", overwrite: "auto" });
+    const hidden = s.alpha === 0 || motionPaused();
+    stage.classList.toggle("is-hidden", s.alpha === 0);
     clearTimeout(hideTimer);
-    if (hidden) hideTimer = setTimeout(() => core.setVisible(false), 900);
+    if (hidden) hideTimer = setTimeout(() => core.setVisible(false), s.alpha === 0 ? 900 : 0);
     else core.setVisible(true);
-    const light = key === "services";
-    nav.classList.toggle("on-light", light);
-    cursor.classList.toggle("on-light", light);
+    nav.classList.toggle("on-light", key === "services");
+    cursor.classList.toggle("on-light", key === "services");
   };
-  map.forEach(([sel, key]) => {
-    ScrollTrigger.create({
-      trigger: sel, start: "top 55%", end: "bottom 55%",
-      onToggle: (self) => self.isActive && go(key),
-    });
-  });
-  // background contour drift with scroll
+  map.forEach(([sel, key]) => ScrollTrigger.create({ trigger: sel, start: "top 55%", end: "bottom 55%", onToggle: (self) => self.isActive && apply(key) }));
   ScrollTrigger.create({ start: 0, end: "max", onUpdate: (self) => (core.state.scroll = self.progress * 3) });
+  motionListeners.push((paused) => {
+    if (paused) { core.setVisible(false); }
+    else apply(lastKey);
+  });
+}
+
+// ================================================================== Pause / play decorative motion
+function setupMotionToggle() {
+  const btns = $$("[data-motion-toggle]");
+  const set = (paused) => {
+    root.classList.toggle("motion-paused", paused);
+    btns.forEach((b) => { b.setAttribute("aria-pressed", String(paused)); $(".motion-toggle__label", b).textContent = paused ? "Play animation" : "Pause animation"; });
+    motionListeners.forEach((fn) => fn(paused));
+    try { localStorage.setItem("ip-motion-paused", paused ? "1" : "0"); } catch (e) {}
+  };
+  btns.forEach((b) => b.addEventListener("click", () => set(!motionPaused())));
+  let saved = null;
+  try { saved = localStorage.getItem("ip-motion-paused"); } catch (e) {}
+  if (saved === "1") set(true);
+}
+
+// ================================================================== Project inquiry form
+function setupForm() {
+  const form = $("#inquiry");
+  const submit = $(".inquiry__submit", form);
+  const label = $(".inquiry__label", form);
+  const status = $(".inquiry__status", form);
+  let sending = false;
+
+  const rules = {
+    name: (v) => (v.trim().length >= 2 ? "" : "Please enter your name."),
+    business: (v) => (v.trim().length >= 2 ? "" : "Please enter your business name."),
+    email: (v) => (/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim()) ? "" : "Please enter a valid email address, like name@business.com."),
+    service: (v) => (v ? "" : "Please choose what you would like help with."),
+  };
+  const check = (name) => {
+    const el = form.elements[name];
+    const msg = rules[name](el.value);
+    el.setAttribute("aria-invalid", msg ? "true" : "false");
+    $(`#${el.id}-err`).textContent = msg;
+    return !msg;
+  };
+  Object.keys(rules).forEach((n) => {
+    const el = form.elements[n];
+    el.addEventListener("blur", () => { if (el.value) check(n); });
+    el.addEventListener("input", () => { if (el.getAttribute("aria-invalid") === "true") check(n); });
+    el.addEventListener("change", () => { if (el.getAttribute("aria-invalid") === "true") check(n); });
+  });
+
+  const setStatus = (html, kind) => { status.className = "inquiry__status" + (kind ? " is-" + kind : ""); status.innerHTML = html; };
+  const fallback = 'Please <a href="https://calendly.com/jemst-consulting-info/30min" target="_blank" rel="noopener">book a free consultation</a>, call <a href="tel:+18632593434">863-259-3434</a> or email <a href="mailto:admin@JEMST-CONSULTING.com">admin@JEMST-CONSULTING.com</a>.';
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (sending) return;
+    const ok = Object.keys(rules).map(check).every(Boolean);
+    if (!ok) {
+      const first = $('[aria-invalid="true"]', form);
+      first && first.focus();
+      setStatus("Please fix the highlighted fields.", "err");
+      return;
+    }
+    if (form.elements.company_website.value) return; // spam trap filled: drop silently
+    const endpoint = (form.dataset.endpoint || "").trim();
+
+    if (!endpoint) {
+      // No approved delivery destination is connected yet. Never show success without a real submission.
+      setStatus("Online inquiries are not connected yet, so this message was not sent. " + fallback, "err");
+      track("inquiry_not_connected");
+      return;
+    }
+
+    sending = true;
+    submit.disabled = true;
+    submit.classList.add("is-loading");
+    label.textContent = "Sending";
+    setStatus("", "");
+    const data = Object.fromEntries(new FormData(form).entries());
+    delete data.company_website;
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 15000);
+    try {
+      const res = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(data), signal: ctrl.signal });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      form.reset();
+      Object.keys(rules).forEach((n) => form.elements[n].removeAttribute("aria-invalid"));
+      setStatus("Thank you. Your inquiry was received and we will reply by email.", "ok");
+      track("inquiry_accepted", { service: data.service });
+    } catch (err) {
+      setStatus("Your inquiry could not be sent. Please try again in a moment. " + fallback, "err");
+      track("inquiry_failed");
+    } finally {
+      clearTimeout(timeout);
+      sending = false;
+      submit.disabled = false;
+      submit.classList.remove("is-loading");
+      label.textContent = "Send my inquiry";
+      status.focus?.();
+    }
+  });
 }
 
 boot();
