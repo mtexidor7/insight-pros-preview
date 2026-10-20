@@ -469,7 +469,7 @@ function setupForm() {
   });
 
   const setStatus = (html, kind) => { status.className = "inquiry__status" + (kind ? " is-" + kind : ""); status.innerHTML = html; };
-  const fallback = 'Please <a href="https://calendly.com/jemst-consulting-info/30min" target="_blank" rel="noopener">book a free consultation</a>, call <a href="tel:+18632593434">863-259-3434</a> or email <a href="mailto:admin@JEMST-CONSULTING.com">admin@JEMST-CONSULTING.com</a>.';
+  const fallback = 'Please <a href="https://calendly.com/jemst-consulting-info/30min" target="_blank" rel="noopener">book a free consultation</a>, call <a href="tel:+18632593434">863-259-3434</a> or email <a href="mailto:info@jemst-consulting.com">info@jemst-consulting.com</a>.';
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();

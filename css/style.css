@@ -432,6 +432,21 @@ details p { color: var(--bone-2); padding: 0 40px 26px 0; max-width: 720px; }
 .inquiry__status a { text-decoration: underline; }
 .inquiry__fine { grid-column: 1 / -1; font-size: 14px; color: var(--mute); }
 
+/* --------------------------------------------------------------- "Find out more" buttons (link to insightproexperts.com) */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.btn--more { gap: 10px; border: 1px solid rgba(100,215,238,.55); color: var(--bone); background: rgba(100,215,238,.06); }
+.btn--more svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; transition: transform .35s var(--ease); }
+.btn--more:hover { border-color: var(--cyan); color: var(--cyan); background: rgba(100,215,238,.12); }
+.btn--more:hover svg { transform: translate(2px,-2px); }
+.btn--more-dark { background: var(--ink); color: var(--bone); border-color: var(--ink); }
+.btn--more-dark:hover { background: var(--royal); border-color: var(--royal); color: #fff; }
+.more-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 28px; margin-top: 32px; padding: 22px 26px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--card); }
+.more-row p { font-size: var(--fs-body); color: var(--bone-2); }
+.more-row--light { background: #fff; border-color: var(--line-ink); }
+.more-row--light p { color: #2b313d; font-weight: 500; }
+.about__copy .btn--more { margin-top: 6px; }
+.footer__top nav .footer__main { color: var(--cyan); }
+
 /* --------------------------------------------------------------- Footer */
 .footer { padding: 56px var(--gutter) calc(30px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--ink); }
 .footer__top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 28px; padding-bottom: 32px; border-bottom: 1px solid var(--line); }
@@ -501,6 +516,8 @@ html.motion-paused .motion-toggle .ic-pause { display: none; }
   .inquiry { grid-template-columns: 1fr; }
   .field--half { grid-column: 1 / -1; }
   .cta__btn { width: 100%; justify-content: space-between; }
+  .more-row { padding: 20px; }
+  .more-row .btn { width: 100%; text-align: center; line-height: 1.25; padding-block: 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

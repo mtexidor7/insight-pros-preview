@@ -16,7 +16,7 @@ Status: **ready for preview review. Not ready for production** until the items m
 | 8 | Client testimonials and permission | Three quotes shown verbatim from insightproexperts.com | **Confirm permission** |
 | 9 | Booking platform and URL | https://calendly.com/jemst-consulting-info/30min (from the existing site) | Confirm a full test booking completes |
 | 10 | Inquiry form destination | **Not connected.** Form validates and shows a clear "not sent" message with phone, email and booking options | **BLOCKER** |
-| 11 | Official contact details | Phone 863-259-3434, admin@JEMST-CONSULTING.com | Confirm |
+| 11 | Official contact details | Phone 863-259-3434, info@jemst-consulting.com | Confirm |
 | 12 | Insight Pros and JEMST legal relationship | Footer/menu say "Insight Pros is a JEMST Consulting company". No parentOrganization in schema until confirmed | Confirm |
 | 13 | Public location and service area | Address labeled "Mailing address". areaServed = Central Florida | Confirm address type |
 | 14 | Specialist services outside the six categories | None shown | Decide per service |
