@@ -19,6 +19,9 @@ const CHORDS = {
 
 export function createSound() {
   let ctx = null;
+  let analyser = null;
+  const MULT = [1, 2, 2, 2];
+  let shimmerGain, shimmer = [];
   let master, padFilter, padGain, airGain, airFilter, reverbSend, voices = [], sub;
   let enabled = false;
   let section = "hero";
@@ -43,6 +46,7 @@ export function createSound() {
   }
 
   function build() {
+    try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return false;
     ctx = new AC();
@@ -51,6 +55,7 @@ export function createSound() {
     comp.threshold.value = -18; comp.ratio.value = 3; comp.attack.value = 0.02; comp.release.value = 0.4;
     master = ctx.createGain(); master.gain.value = 0;
     master.connect(comp).connect(ctx.destination);
+    analyser = ctx.createAnalyser(); analyser.fftSize = 2048; comp.connect(analyser);
 
     // reverb bus
     const reverb = ctx.createConvolver(); reverb.buffer = impulse();
@@ -58,18 +63,20 @@ export function createSound() {
     reverbSend.connect(reverb).connect(master);
 
     // pad
-    padFilter = ctx.createBiquadFilter(); padFilter.type = "lowpass"; padFilter.frequency.value = 520; padFilter.Q.value = 0.8;
-    padGain = ctx.createGain(); padGain.gain.value = 0.16;
+    padFilter = ctx.createBiquadFilter(); padFilter.type = "lowpass"; padFilter.frequency.value = 2000; padFilter.Q.value = 0.7;
+    padGain = ctx.createGain(); padGain.gain.value = 0.55;
     padFilter.connect(padGain);
     padGain.connect(master);
     padGain.connect(reverbSend);
 
     const lfo = ctx.createOscillator(); lfo.frequency.value = 0.06;
-    const lfoDepth = ctx.createGain(); lfoDepth.gain.value = 140;
+    const lfoDepth = ctx.createGain(); lfoDepth.gain.value = 500;
     lfo.connect(lfoDepth).connect(padFilter.frequency); lfo.start();
 
-    CHORDS.hero.forEach((f, i) => {
-      const g = ctx.createGain(); g.gain.value = i === 0 ? 0.32 : 0.22;
+    CHORDS.hero.forEach((f0, i) => {
+      let f = f0;
+      const g = ctx.createGain(); g.gain.value = i === 0 ? 0.3 : 0.24;
+      f = f * MULT[i];
       const a = ctx.createOscillator(); a.type = "sawtooth"; a.frequency.value = f; a.detune.value = -7;
       const b = ctx.createOscillator(); b.type = "triangle"; b.frequency.value = f; b.detune.value = 6;
       const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
@@ -79,14 +86,24 @@ export function createSound() {
       voices.push({ a, b });
     });
 
-    sub = ctx.createOscillator(); sub.type = "sine"; sub.frequency.value = CHORDS.hero[0] / 2;
-    const subGain = ctx.createGain(); subGain.gain.value = 0.12;
+    shimmerGain = ctx.createGain(); shimmerGain.gain.value = 0.05;
+    const trem = ctx.createOscillator(); trem.frequency.value = 0.18;
+    const tremDepth = ctx.createGain(); tremDepth.gain.value = 0.025;
+    trem.connect(tremDepth).connect(shimmerGain.gain); trem.start();
+    shimmerGain.connect(master); shimmerGain.connect(reverbSend);
+    CHORDS.hero.slice(1).forEach((f) => {
+      const o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = f * 4;
+      o.connect(shimmerGain); o.start(); shimmer.push(o);
+    });
+
+    sub = ctx.createOscillator(); sub.type = "sine"; sub.frequency.value = CHORDS.hero[0];
+    const subGain = ctx.createGain(); subGain.gain.value = 0.045;
     sub.connect(subGain).connect(master); sub.start();
 
     // air: soft filtered noise that rises with scroll speed
     const air = ctx.createBufferSource(); air.buffer = noiseBuffer(3); air.loop = true;
-    airFilter = ctx.createBiquadFilter(); airFilter.type = "bandpass"; airFilter.frequency.value = 1600; airFilter.Q.value = 0.5;
-    airGain = ctx.createGain(); airGain.gain.value = 0.012;
+    airFilter = ctx.createBiquadFilter(); airFilter.type = "bandpass"; airFilter.frequency.value = 2600; airFilter.Q.value = 0.5;
+    airGain = ctx.createGain(); airGain.gain.value = 0.03;
     air.connect(airFilter).connect(airGain).connect(reverbSend);
     air.start();
 
@@ -102,10 +119,11 @@ export function createSound() {
     if (!ctx || !chord) return;
     const t = ctx.currentTime;
     voices.forEach((v, i) => {
-      v.a.frequency.setTargetAtTime(chord[i], t, glide / 3);
-      v.b.frequency.setTargetAtTime(chord[i], t, glide / 3);
+      v.a.frequency.setTargetAtTime(chord[i] * MULT[i], t, glide / 3);
+      v.b.frequency.setTargetAtTime(chord[i] * MULT[i], t, glide / 3);
     });
-    sub.frequency.setTargetAtTime(chord[0] / 2, t, glide / 3);
+    shimmer.forEach((o, i) => o.frequency.setTargetAtTime(chord[i + 1] * 4, t, glide / 3));
+    sub.frequency.setTargetAtTime(chord[0], t, glide / 3);
   }
 
   // filtered-noise sweep for section transitions
@@ -114,12 +132,12 @@ export function createSound() {
     const t = ctx.currentTime;
     const src = ctx.createBufferSource(); src.buffer = noiseBuffer(1.6);
     const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 1.2;
-    bp.frequency.setValueAtTime(260, t);
-    bp.frequency.exponentialRampToValueAtTime(2600, t + 0.55);
-    bp.frequency.exponentialRampToValueAtTime(500, t + 1.4);
+    bp.frequency.setValueAtTime(500, t);
+    bp.frequency.exponentialRampToValueAtTime(4200, t + 0.55);
+    bp.frequency.exponentialRampToValueAtTime(900, t + 1.4);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.09 * strength, t + 0.45);
+    g.gain.exponentialRampToValueAtTime(0.22 * strength, t + 0.45);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
     src.connect(bp).connect(g);
     g.connect(master); g.connect(reverbSend);
@@ -144,6 +162,8 @@ export function createSound() {
   return {
     get enabled() { return enabled; },
     get state() { return ctx ? ctx.state : "not started"; },
+    level() { if (!analyser) return null; const d = new Float32Array(analyser.fftSize); analyser.getFloatTimeDomainData(d); let sum = 0, peak = 0; for (const v of d) { sum += v * v; peak = Math.max(peak, Math.abs(v)); } return { rmsDb: +(20 * Math.log10(Math.sqrt(sum / d.length) || 1e-9)).toFixed(1), peakDb: +(20 * Math.log10(peak || 1e-9)).toFixed(1) }; },
+    spectrum() { if (!analyser) return null; const f = new Float32Array(analyser.frequencyBinCount); analyser.getFloatFrequencyData(f); const hz = ctx.sampleRate / analyser.fftSize; const band = (a, b) => { let m = -200; for (let i = Math.floor(a / hz); i < Math.ceil(b / hz); i++) m = Math.max(m, f[i]); return +m.toFixed(0); }; return { "under200Hz": band(20, 200), "200-1000Hz": band(200, 1000), "1-4kHz": band(1000, 4000) }; },
 
     async enable() {
       if (!ctx && !build()) return false;
@@ -153,9 +173,9 @@ export function createSound() {
       const t = ctx.currentTime;
       master.gain.cancelScheduledValues(t);
       master.gain.setValueAtTime(master.gain.value, t);
-      master.gain.linearRampToValueAtTime(0.85, t + 2.2);
-      whoosh(0.8);
-      chime(CHORDS[section][3] * 2, 0.035);
+      master.gain.linearRampToValueAtTime(1, t + 1.5);
+      whoosh(1.2);
+      chime(CHORDS[section][3] * 2, 0.12);
       return true;
     },
 
@@ -174,17 +194,17 @@ export function createSound() {
       section = key;
       if (!enabled) return;
       setChord(key);
-      whoosh(key === "walkthrough" ? 1.2 : 0.8);
-      if (key === "contact" || key === "services") chime(CHORDS[key][3] * 2, 0.04);
+      whoosh(key === "walkthrough" ? 1.3 : 0.9);
+      if (key === "contact" || key === "services") chime(CHORDS[key][3] * 2, 0.08);
     },
 
     velocity(v) {
       if (!enabled) return;
       const s = Math.min(Math.abs(v), 60);
       const t = ctx.currentTime;
-      padFilter.frequency.setTargetAtTime(520 + s * 38, t, 0.25);
-      airGain.gain.setTargetAtTime(0.012 + s * 0.0016, t, 0.3);
-      airFilter.frequency.setTargetAtTime(1600 + s * 40, t, 0.3);
+      padFilter.frequency.setTargetAtTime(2000 + s * 60, t, 0.25);
+      airGain.gain.setTargetAtTime(0.03 + s * 0.003, t, 0.3);
+      airFilter.frequency.setTargetAtTime(2600 + s * 50, t, 0.3);
     },
 
     tick() {
@@ -196,7 +216,7 @@ export function createSound() {
       const o = ctx.createOscillator(); o.type = "sine";
       o.frequency.setValueAtTime(1900, t); o.frequency.exponentialRampToValueAtTime(2600, t + 0.04);
       const g = ctx.createGain();
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.022, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.06, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
       o.connect(g).connect(master); o.start(t); o.stop(t + 0.08);
     },
 
@@ -207,7 +227,7 @@ export function createSound() {
         const o = ctx.createOscillator(); o.type = "triangle"; o.frequency.value = f;
         const g = ctx.createGain();
         const s = t + i * 0.06;
-        g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(0.05, s + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, s + 0.22);
+        g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(0.1, s + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, s + 0.22);
         o.connect(g); g.connect(master); g.connect(reverbSend);
         o.start(s); o.stop(s + 0.25);
       });

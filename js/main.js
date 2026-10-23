@@ -1,5 +1,5 @@
 // Insight Pros: scroll choreography, interactions, inquiry form, sound and the WebGL globe.
-import { createSound } from "./sound.js";
+import { createSound } from "./sound.js?v=20261023";
 const $ = (s, c = document) => c.querySelector(s);
 const $$ = (s, c = document) => [...c.querySelectorAll(s)];
 
@@ -34,7 +34,7 @@ async function boot() {
 
   if (!reduced) {
     try {
-      const { createCore } = await import("./core.js");
+      const { createCore } = await import("./core.js?v=20261023");
       core = createCore($(".stage"), { mobile: isMobile() });
     } catch (e) {
       core = null;
