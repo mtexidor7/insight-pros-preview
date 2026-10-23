@@ -456,6 +456,19 @@ details p { color: var(--bone-2); padding: 0 40px 26px 0; max-width: 720px; }
 .footer__top nav a:hover { color: var(--cyan); }
 .footer__row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; padding-top: 24px; color: var(--bone-2); font-size: var(--fs-small); }
 
+/* --------------------------------------------------------------- Sound toggle (top nav) */
+.sound-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; min-width: 44px; padding: 0 16px 0 13px; border-radius: 99px; border: 1px solid rgba(236,235,228,.35); background: rgba(5,11,27,.72); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); color: var(--bone); font-size: 14px; font-weight: 500; white-space: nowrap; transition: color .25s, border-color .25s, background .25s; }
+.sound-toggle:hover { border-color: var(--cyan); }
+.sound-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.sound-toggle .ic-sound-on { display: none; }
+.sound-toggle[aria-pressed="true"] { color: var(--cyan); border-color: rgba(100,215,238,.7); background: rgba(10,30,60,.8); }
+.sound-toggle[aria-pressed="true"] .ic-sound-on { display: block; }
+.sound-toggle[aria-pressed="true"] .ic-sound-off { display: none; }
+.sound-toggle[aria-pressed="true"] .w1 { animation: wave 1.4s ease-in-out infinite; }
+.sound-toggle[aria-pressed="true"] .w2 { animation: wave 1.4s ease-in-out -.5s infinite; }
+@keyframes wave { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+html.motion-paused .sound-toggle .w1, html.motion-paused .sound-toggle .w2 { animation: none; }
+
 /* --------------------------------------------------------------- Motion toggle (in nav on desktop, in menu on smaller screens) */
 .motion-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; min-width: 44px; padding: 0 14px; border-radius: 99px; border: 1px solid var(--line); color: var(--bone-2); font-size: 13px; transition: color .25s, border-color .25s; }
 .motion-toggle:hover { color: var(--bone); border-color: var(--cyan); }
@@ -473,6 +486,8 @@ html.motion-paused .motion-toggle .ic-pause { display: none; }
   .menu-btn { display: grid; }
   .motion-toggle--nav { display: none; }
   .motion-toggle--menu { display: inline-flex; }
+  .sound-toggle { padding: 0; width: 44px; justify-content: center; }
+  .sound-toggle__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .svc-grid, .work-grid { grid-template-columns: repeat(2, 1fr); }
   .problems__grid { grid-template-columns: repeat(2, 1fr); }
   .hero__foot { grid-template-columns: 1fr; }
@@ -489,6 +504,7 @@ html.motion-paused .motion-toggle .ic-pause { display: none; }
   .pill { padding: 0 14px; }
   .pill span { font-size: 13px; }
   .pill svg { display: none; }
+  .nav__right { gap: 8px; }
   .brand img { width: 132px; }
   .hero__title { font-size: clamp(54px, 17vw, 110px); }
   .line--sub { font-size: .46em; }
@@ -531,3 +547,7 @@ html.motion-paused .motion-toggle .ic-pause { display: none; }
   .voice__progress { display: none; }
   .chat__msg { display: block; }
 }
+
+@media (max-width: 520px) { .nav .pill { display: none; } }
+
+@media (max-width: 1360px) { .sound-toggle { padding: 0; width: 44px; justify-content: center; } .sound-toggle__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } }

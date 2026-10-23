@@ -1,4 +1,5 @@
-// Insight Pros: scroll choreography, interactions, inquiry form and the WebGL globe.
+// Insight Pros: scroll choreography, interactions, inquiry form, sound and the WebGL globe.
+import { createSound } from "./sound.js";
 const $ = (s, c = document) => c.querySelector(s);
 const $$ = (s, c = document) => [...c.querySelectorAll(s)];
 
@@ -64,6 +65,7 @@ async function boot() {
   setupMarquee(gsap);
   setupForm();
   setupMotionToggle();
+  setupSound(ScrollTrigger);
   $$("[data-track]").forEach((el) => el.addEventListener("click", () => track(el.dataset.track, { location: el.closest("section")?.id || "nav" })));
 
   await runLoader(gsap);
@@ -423,6 +425,47 @@ function setupScenes(gsap, ScrollTrigger) {
     if (paused) { core.setVisible(false); }
     else apply(lastKey);
   });
+}
+
+// ================================================================== Sound (off by default, toggle at the top)
+function setupSound(ScrollTrigger) {
+  const sound = createSound();
+  window.__insightSound = sound;
+  const btns = $$("[data-sound-toggle]");
+  const KEY = "ip-sound-on";
+  const render = (on) => btns.forEach((b) => {
+    b.setAttribute("aria-pressed", String(on));
+    $(".sound-toggle__label", b).textContent = on ? "Sound on" : "Sound off";
+    b.setAttribute("aria-label", on ? "Turn sound off" : "Turn sound on");
+  });
+  const save = (on) => { try { localStorage.setItem(KEY, on ? "1" : "0"); } catch (e) {} };
+  const turnOn = async () => { const ok = await sound.enable(); render(ok); if (ok) save(true); track("sound_on"); };
+  const turnOff = () => { sound.disable(); render(false); save(false); track("sound_off"); };
+  render(false);
+  btns.forEach((b) => b.addEventListener("click", () => (sound.enabled ? turnOff() : turnOn())));
+
+  // Returning visitors who left sound on: browsers need a click or key press before audio can start
+  let saved = null;
+  try { saved = localStorage.getItem(KEY); } catch (e) {}
+  if (saved === "1") {
+    const start = (e) => {
+      if (e.target.closest && e.target.closest("[data-sound-toggle]")) return;
+      window.removeEventListener("pointerdown", start); window.removeEventListener("keydown", start);
+      turnOn();
+    };
+    window.addEventListener("pointerdown", start); window.addEventListener("keydown", start);
+  }
+
+  // score follows the sections and the scroll speed
+  [["#top", "hero"], ["#problems", "problems"], ["#services", "services"], ["#audience", "audience"], ["#work", "work"], ["#walkthrough", "walkthrough"], ["#estimate", "estimate"], ["#about", "about"], ["#process", "process"], ["#search", "search"], ["#faq", "faq"], ["#contact", "contact"]]
+    .forEach(([sel, key]) => ScrollTrigger.create({ trigger: sel, start: "top 55%", end: "bottom 55%", onToggle: (self) => self.isActive && sound.section(key) }));
+  if (lenis) lenis.on("scroll", ({ velocity }) => sound.velocity(velocity));
+  else { let lastY = window.scrollY; window.addEventListener("scroll", () => { sound.velocity((window.scrollY - lastY) / 4); lastY = window.scrollY; }, { passive: true }); }
+
+  // quiet interface sounds
+  const interactive = "a, button, summary, [role=tab], input[type=range]";
+  if (finePointer) document.addEventListener("pointerover", (e) => { const el = e.target.closest(interactive); if (el && !el.contains(e.relatedTarget)) sound.tick(); });
+  document.addEventListener("click", (e) => { const el = e.target.closest(interactive); if (el && !el.matches("[data-sound-toggle]")) sound.click(); });
 }
 
 // ================================================================== Pause / play decorative motion
