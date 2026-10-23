@@ -1,5 +1,5 @@
 // Insight Pros: scroll choreography, interactions, inquiry form, sound and the WebGL globe.
-import { createSound } from "./sound.js?v=20261023b";
+import { createSound } from "./sound.js?v=20261023c";
 const $ = (s, c = document) => c.querySelector(s);
 const $$ = (s, c = document) => [...c.querySelectorAll(s)];
 
@@ -34,7 +34,7 @@ async function boot() {
 
   if (!reduced) {
     try {
-      const { createCore } = await import("./core.js?v=20261023b");
+      const { createCore } = await import("./core.js?v=20261023c");
       core = createCore($(".stage"), { mobile: isMobile() });
     } catch (e) {
       core = null;
@@ -439,7 +439,7 @@ function setupSound(ScrollTrigger) {
   const save = (on) => { try { localStorage.setItem(KEY, on ? "1" : "0"); } catch (e) {} };
   let autoStart = null;
   const clearAuto = () => { if (autoStart) { window.removeEventListener("pointerdown", autoStart); window.removeEventListener("keydown", autoStart); autoStart = null; } };
-  const turnOn = async () => { clearAuto(); render(true); const ok = await sound.enable(); if (sound.enabled) { save(true); track("sound_on"); } else render(false); };
+  const turnOn = async () => { clearAuto(); render(true); const ok = await sound.enable(); if (sound.enabled) { save(true); track("sound_on"); setTimeout(() => window.dispatchEvent(new Event("ip-sound-resync")), 50); } else render(false); };
   const turnOff = () => { clearAuto(); sound.disable(); render(false); save(false); track("sound_off"); };
   render(false);
   btns.forEach((b) => b.addEventListener("click", () => (sound.enabled ? turnOff() : turnOn())));
@@ -458,7 +458,17 @@ function setupSound(ScrollTrigger) {
   // score follows the sections and the scroll speed
   [["#top", "hero"], ["#problems", "problems"], ["#services", "services"], ["#audience", "audience"], ["#work", "work"], ["#walkthrough", "walkthrough"], ["#estimate", "estimate"], ["#about", "about"], ["#process", "process"], ["#search", "search"], ["#faq", "faq"], ["#contact", "contact"]]
     .forEach(([sel, key]) => ScrollTrigger.create({ trigger: sel, start: "top 55%", end: "bottom 55%", onToggle: (self) => self.isActive && sound.section(key) }));
-  if (lenis) lenis.on("scroll", ({ velocity }) => sound.velocity(velocity));
+  // phone walkthrough: ring as the section arrives, then follow the scroll-scrubbed steps
+  let wtIn = false, wtP = 0;
+  window.addEventListener("ip-sound-resync", () => wtUpdate());
+  const wtUpdate = () => {
+    const steps = 4;
+    const step = Math.min(steps - 1, Math.floor(wtP * steps * 0.999));
+    sound.walkthrough(wtIn, step, Math.min(1, (wtP * steps) % 1 || (wtP > 0 ? 1 : 0)));
+  };
+  ScrollTrigger.create({ trigger: "#walkthrough", start: "top 70%", end: "bottom 30%", onToggle: (self) => { wtIn = self.isActive; wtUpdate(); } });
+  ScrollTrigger.create({ trigger: "#walkthrough", start: "top top", end: "bottom bottom", onUpdate: (self) => { wtP = self.progress; if (wtIn) wtUpdate(); } });
+  if (lenis) lenis.on("scroll", ({ velocity }) => { sound.velocity(velocity); sound.walkthroughSpeed(velocity); });
   else { let lastY = window.scrollY; window.addEventListener("scroll", () => { sound.velocity((window.scrollY - lastY) / 4); lastY = window.scrollY; }, { passive: true }); }
 
   // quiet interface sounds

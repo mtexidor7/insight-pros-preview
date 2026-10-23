@@ -172,6 +172,127 @@ export function createSound() {
     });
   }
 
+  // ------------------------------------------------------------ Phone section: futuristic "galaxy" ringtone
+  // Original melody: bright bell tones in a high E-major pentatonic, with sparkles and deep-space echo.
+  const RING_NOTES = [1318.5, 1975.5, 1661.2, 2637.0, 2217.5, 1975.5];        // E6 B6 G#6 E7 C#7 B6
+  const RING_ANSWER = [2637.0, 1975.5, 1318.5, 1661.2, 2637.0];               // "call connected" sweep
+  let ringBus = null, ringFilter = null, ringDelay = null, ringTimer = null, ringing = false;
+  let wtStep = -1, ringLift = 0, dataTimer = null, dataRate = 0;
+
+  function ringGraph() {
+    if (ringBus) return;
+    ringFilter = ctx.createBiquadFilter(); ringFilter.type = "lowpass"; ringFilter.frequency.value = 5000; ringFilter.Q.value = 0.5;
+    ringBus = ctx.createGain(); ringBus.gain.value = 0;
+    // ping-pong style space echo
+    ringDelay = ctx.createDelay(1.5); ringDelay.delayTime.value = 0.32;
+    const fb = ctx.createGain(); fb.gain.value = 0.38;
+    const echoTone = ctx.createBiquadFilter(); echoTone.type = "highpass"; echoTone.frequency.value = 900;
+    ringFilter.connect(ringBus);
+    ringBus.connect(master); ringBus.connect(reverbSend);
+    ringBus.connect(ringDelay); ringDelay.connect(echoTone).connect(fb).connect(ringDelay);
+    const echoOut = ctx.createGain(); echoOut.gain.value = 0.5; echoTone.connect(echoOut).connect(master);
+  }
+
+  // one bell note: sine carrier + FM modulator for a glassy metallic attack, plus a soft octave
+  function bell(freq, when, vol, pan = 0) {
+    const c = ctx.createOscillator(); c.type = "sine"; c.frequency.value = freq;
+    const m = ctx.createOscillator(); m.type = "sine"; m.frequency.value = freq * 3.5;
+    const mg = ctx.createGain();
+    mg.gain.setValueAtTime(freq * 1.4, when); mg.gain.exponentialRampToValueAtTime(1, when + 0.5);
+    m.connect(mg).connect(c.frequency);
+    const o8 = ctx.createOscillator(); o8.type = "triangle"; o8.frequency.value = freq / 2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.exponentialRampToValueAtTime(vol, when + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + 0.9);
+    const g8 = ctx.createGain(); g8.gain.value = 0.35;
+    let out = g;
+    if (ctx.createStereoPanner) { const pn = ctx.createStereoPanner(); pn.pan.value = pan; g.connect(pn); out = pn; }
+    c.connect(g); o8.connect(g8).connect(g);
+    out.connect(ringFilter);
+    [c, m, o8].forEach((o) => { o.start(when); o.stop(when + 1); });
+  }
+
+  // tiny high sparkles drifting around the stereo field
+  function sparkle(when) {
+    for (let i = 0; i < 5; i++) {
+      const t = when + Math.random() * 1.1;
+      const o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = 4200 + Math.random() * 2600;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.012, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
+      let out = g;
+      if (ctx.createStereoPanner) { const pn = ctx.createStereoPanner(); pn.pan.value = Math.random() * 2 - 1; g.connect(pn); out = pn; }
+      o.connect(g); out.connect(ringBus);
+      o.start(t); o.stop(t + 0.3);
+    }
+  }
+
+  function ringPhrase() {
+    if (!enabled || !ringing) return;
+    const t = ctx.currentTime + 0.02;
+    const lift = 1 + ringLift * 0.06; // phrase rises slightly as you scroll toward the answer
+    RING_NOTES.forEach((f, i) => bell(f * lift, t + i * 0.12, 0.05, i % 2 ? 0.45 : -0.45));
+    // answering phrase, a fourth higher, after a breath
+    RING_NOTES.slice(0, 4).forEach((f, i) => bell(f * lift * 1.335, t + 0.95 + i * 0.12, 0.04, i % 2 ? -0.35 : 0.35));
+    sparkle(t);
+  }
+
+  function startRing() {
+    if (ringing || !enabled) return;
+    ringGraph();
+    ringing = true;
+    const t = ctx.currentTime;
+    ringBus.gain.cancelScheduledValues(t);
+    ringBus.gain.setValueAtTime(ringBus.gain.value, t);
+    ringBus.gain.linearRampToValueAtTime(1, t + 0.15);
+    padGain.gain.setTargetAtTime(0.09, t, 0.4); // duck the background so the phone stands out
+    ringPhrase();
+    ringTimer = setInterval(ringPhrase, 2300);
+  }
+
+  function stopRing(fade = 0.5) {
+    if (!ringing) return;
+    ringing = false;
+    clearInterval(ringTimer); ringTimer = null;
+    if (!ctx || !ringBus) return;
+    const t = ctx.currentTime;
+    ringBus.gain.cancelScheduledValues(t);
+    ringBus.gain.setValueAtTime(ringBus.gain.value, t);
+    ringBus.gain.linearRampToValueAtTime(0, t + fade);
+    padGain.gain.setTargetAtTime(0.2, t, 0.8);
+  }
+
+  function answerSound() {
+    if (!enabled) return;
+    ringGraph();
+    const t = ctx.currentTime + 0.05;
+    ringBus.gain.cancelScheduledValues(t); ringBus.gain.setValueAtTime(1, t);
+    RING_ANSWER.forEach((f, i) => bell(f, t + i * 0.07, 0.045, i / 2 - 1));
+    // rising connect sweep
+    const o = ctx.createOscillator(); o.type = "sine";
+    o.frequency.setValueAtTime(600, t); o.frequency.exponentialRampToValueAtTime(3200, t + 0.5);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.035, t + 0.1); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+    o.connect(g); g.connect(master); g.connect(reverbSend);
+    o.start(t); o.stop(t + 0.75);
+    setTimeout(() => { if (!ringing && ringBus) ringBus.gain.setTargetAtTime(0, ctx.currentTime, 0.6); }, 1600);
+  }
+
+  // soft data-transmission blips while the "conversation" plays; rate follows scroll speed
+  function dataTick() {
+    if (!enabled || wtStep < 1) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = "square";
+    o.frequency.value = [1760, 2093, 2349, 2637][Math.floor(Math.random() * 4)];
+    const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 2400; bp.Q.value = 6;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.012 + dataRate * 0.0006, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+    o.connect(bp).connect(g); g.connect(master); g.connect(reverbSend);
+    o.start(t); o.stop(t + 0.07);
+    clearTimeout(dataTimer);
+    dataTimer = setTimeout(dataTick, Math.max(55, 420 - dataRate * 9) + Math.random() * 80);
+  }
+
   return {
     get enabled() { return enabled; },
     get state() { return ctx ? ctx.state : "not started"; },
@@ -195,6 +316,9 @@ export function createSound() {
 
     disable() {
       token++;
+      stopRing(0.2);
+      clearTimeout(dataTimer);
+      wtStep = -1;
       enabled = false;
       if (!ctx) return;
       const t = ctx.currentTime;
@@ -203,6 +327,29 @@ export function createSound() {
       master.gain.linearRampToValueAtTime(0, t + 0.6);
       setTimeout(() => { if (!enabled) ctx.suspend(); }, 650);
     },
+
+    // Phone walkthrough: inView = section on screen, step = 0..3 (scroll-scrubbed), p = progress through step 1 (0..1)
+    walkthrough(inView, step, p) {
+      if (!enabled) return;
+      if (!inView) { stopRing(0.6); clearTimeout(dataTimer); wtStep = -1; return; }
+      if (step === 0) {
+        ringLift = p;
+        if (ringFilter) ringFilter.frequency.setTargetAtTime(3200 + p * 5000, ctx.currentTime, 0.2);
+        if (ringBus && ringing) ringBus.gain.setTargetAtTime(0.75 + p * 0.35, ctx.currentTime, 0.2);
+        startRing();
+      }
+      if (step !== wtStep) {
+        const prev = wtStep;
+        wtStep = step;
+        if (step >= 1 && ringing) { stopRing(0.15); answerSound(); }
+        if (step >= 1 && prev < 1) dataTick();
+        if (step === 2 && prev === 1) chime(1975.5, 0.05);          // appointment requested
+        if (step === 3 && prev === 2) { chime(1318.5, 0.05); setTimeout(() => chime(987.8, 0.045), 160); } // handoff to the team
+        if (step === 0) clearTimeout(dataTimer);
+      }
+    },
+
+    walkthroughSpeed(v) { dataRate = Math.min(Math.abs(v), 40); },
 
     section(key) {
       if (key === section) return;
