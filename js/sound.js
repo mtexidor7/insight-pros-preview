@@ -19,8 +19,9 @@ const CHORDS = {
 
 export function createSound() {
   let ctx = null;
-  let analyser = null;
   const MULT = [1, 2, 2, 2];
+  const MASTER = 0.45; // overall volume (0 to 1)
+  let token = 0;     // guards against an 'off' click while sound is still starting
   let shimmerGain, shimmer = [];
   let master, padFilter, padGain, airGain, airFilter, reverbSend, voices = [], sub;
   let enabled = false;
@@ -55,7 +56,6 @@ export function createSound() {
     comp.threshold.value = -18; comp.ratio.value = 3; comp.attack.value = 0.02; comp.release.value = 0.4;
     master = ctx.createGain(); master.gain.value = 0;
     master.connect(comp).connect(ctx.destination);
-    analyser = ctx.createAnalyser(); analyser.fftSize = 2048; comp.connect(analyser);
 
     // reverb bus
     const reverb = ctx.createConvolver(); reverb.buffer = impulse();
@@ -63,8 +63,8 @@ export function createSound() {
     reverbSend.connect(reverb).connect(master);
 
     // pad
-    padFilter = ctx.createBiquadFilter(); padFilter.type = "lowpass"; padFilter.frequency.value = 2000; padFilter.Q.value = 0.7;
-    padGain = ctx.createGain(); padGain.gain.value = 0.55;
+    padFilter = ctx.createBiquadFilter(); padFilter.type = "lowpass"; padFilter.frequency.value = 1400; padFilter.Q.value = 0.7;
+    padGain = ctx.createGain(); padGain.gain.value = 0.2;
     padFilter.connect(padGain);
     padGain.connect(master);
     padGain.connect(reverbSend);
@@ -86,9 +86,9 @@ export function createSound() {
       voices.push({ a, b });
     });
 
-    shimmerGain = ctx.createGain(); shimmerGain.gain.value = 0.05;
+    shimmerGain = ctx.createGain(); shimmerGain.gain.value = 0.022;
     const trem = ctx.createOscillator(); trem.frequency.value = 0.18;
-    const tremDepth = ctx.createGain(); tremDepth.gain.value = 0.025;
+    const tremDepth = ctx.createGain(); tremDepth.gain.value = 0.012;
     trem.connect(tremDepth).connect(shimmerGain.gain); trem.start();
     shimmerGain.connect(master); shimmerGain.connect(reverbSend);
     CHORDS.hero.slice(1).forEach((f) => {
@@ -103,7 +103,7 @@ export function createSound() {
     // air: soft filtered noise that rises with scroll speed
     const air = ctx.createBufferSource(); air.buffer = noiseBuffer(3); air.loop = true;
     airFilter = ctx.createBiquadFilter(); airFilter.type = "bandpass"; airFilter.frequency.value = 2600; airFilter.Q.value = 0.5;
-    airGain = ctx.createGain(); airGain.gain.value = 0.03;
+    airGain = ctx.createGain(); airGain.gain.value = 0.012;
     air.connect(airFilter).connect(airGain).connect(reverbSend);
     air.start();
 
@@ -137,11 +137,24 @@ export function createSound() {
     bp.frequency.exponentialRampToValueAtTime(900, t + 1.4);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.22 * strength, t + 0.45);
+    g.gain.exponentialRampToValueAtTime(0.1 * strength, t + 0.45);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
     src.connect(bp).connect(g);
     g.connect(master); g.connect(reverbSend);
     src.start(t); src.stop(t + 1.6);
+  }
+
+  // rapid rising digital arpeggio, like a HUD scanning in
+  function scan(chord) {
+    if (!ctx || !enabled || !chord) return;
+    const t = ctx.currentTime;
+    [chord[1] * 4, chord[2] * 4, chord[3] * 4, chord[1] * 8].forEach((f, i) => {
+      const o = ctx.createOscillator(); o.type = "triangle"; o.frequency.value = f;
+      const g = ctx.createGain(); const s0 = t + i * 0.055;
+      g.gain.setValueAtTime(0.0001, s0); g.gain.exponentialRampToValueAtTime(0.03, s0 + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, s0 + 0.16);
+      o.connect(g); g.connect(master); g.connect(reverbSend);
+      o.start(s0); o.stop(s0 + 0.2);
+    });
   }
 
   // soft bell for arrivals
@@ -162,31 +175,33 @@ export function createSound() {
   return {
     get enabled() { return enabled; },
     get state() { return ctx ? ctx.state : "not started"; },
-    level() { if (!analyser) return null; const d = new Float32Array(analyser.fftSize); analyser.getFloatTimeDomainData(d); let sum = 0, peak = 0; for (const v of d) { sum += v * v; peak = Math.max(peak, Math.abs(v)); } return { rmsDb: +(20 * Math.log10(Math.sqrt(sum / d.length) || 1e-9)).toFixed(1), peakDb: +(20 * Math.log10(peak || 1e-9)).toFixed(1) }; },
-    spectrum() { if (!analyser) return null; const f = new Float32Array(analyser.frequencyBinCount); analyser.getFloatFrequencyData(f); const hz = ctx.sampleRate / analyser.fftSize; const band = (a, b) => { let m = -200; for (let i = Math.floor(a / hz); i < Math.ceil(b / hz); i++) m = Math.max(m, f[i]); return +m.toFixed(0); }; return { "under200Hz": band(20, 200), "200-1000Hz": band(200, 1000), "1-4kHz": band(1000, 4000) }; },
 
     async enable() {
+      const my = ++token;
       if (!ctx && !build()) return false;
       await ctx.resume();
+      if (my !== token) return false; // turned off while starting
       enabled = true;
       setChord(section, 0.1);
       const t = ctx.currentTime;
       master.gain.cancelScheduledValues(t);
       master.gain.setValueAtTime(master.gain.value, t);
-      master.gain.linearRampToValueAtTime(1, t + 1.5);
-      whoosh(1.2);
-      chime(CHORDS[section][3] * 2, 0.12);
+      master.gain.linearRampToValueAtTime(MASTER, t + 1.5);
+      whoosh(1);
+      chime(CHORDS[section][3] * 2, 0.06);
+      scan(CHORDS[section]);
       return true;
     },
 
     disable() {
-      if (!ctx) return;
+      token++;
       enabled = false;
+      if (!ctx) return;
       const t = ctx.currentTime;
       master.gain.cancelScheduledValues(t);
       master.gain.setValueAtTime(master.gain.value, t);
       master.gain.linearRampToValueAtTime(0, t + 0.6);
-      setTimeout(() => { if (!enabled) ctx.suspend(); }, 700);
+      setTimeout(() => { if (!enabled) ctx.suspend(); }, 650);
     },
 
     section(key) {
@@ -194,16 +209,17 @@ export function createSound() {
       section = key;
       if (!enabled) return;
       setChord(key);
-      whoosh(key === "walkthrough" ? 1.3 : 0.9);
-      if (key === "contact" || key === "services") chime(CHORDS[key][3] * 2, 0.08);
+      whoosh(key === "walkthrough" ? 1.1 : 0.8);
+      scan(CHORDS[key]);
+      if (key === "contact" || key === "services") chime(CHORDS[key][3] * 2, 0.04);
     },
 
     velocity(v) {
       if (!enabled) return;
       const s = Math.min(Math.abs(v), 60);
       const t = ctx.currentTime;
-      padFilter.frequency.setTargetAtTime(2000 + s * 60, t, 0.25);
-      airGain.gain.setTargetAtTime(0.03 + s * 0.003, t, 0.3);
+      padFilter.frequency.setTargetAtTime(1400 + s * 45, t, 0.25);
+      airGain.gain.setTargetAtTime(0.012 + s * 0.0015, t, 0.3);
       airFilter.frequency.setTargetAtTime(2600 + s * 50, t, 0.3);
     },
 
@@ -216,8 +232,36 @@ export function createSound() {
       const o = ctx.createOscillator(); o.type = "sine";
       o.frequency.setValueAtTime(1900, t); o.frequency.exponentialRampToValueAtTime(2600, t + 0.04);
       const g = ctx.createGain();
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.06, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.045, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
       o.connect(g).connect(master); o.start(t); o.stop(t + 0.08);
+    },
+
+    // boxes and tabs: quick futuristic "select" chirp
+    select() {
+      if (!enabled) return;
+      const t = ctx.currentTime;
+      const o = ctx.createOscillator(); o.type = "sine";
+      o.frequency.setValueAtTime(900, t); o.frequency.exponentialRampToValueAtTime(2200, t + 0.09);
+      const o2 = ctx.createOscillator(); o2.type = "triangle";
+      o2.frequency.setValueAtTime(1800, t + 0.07); o2.frequency.exponentialRampToValueAtTime(2700, t + 0.14);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+      o.connect(g); o2.connect(g); g.connect(master); g.connect(reverbSend);
+      o.start(t); o.stop(t + 0.24); o2.start(t + 0.07); o2.stop(t + 0.24);
+    },
+
+    // hovering a box: very soft low "glass" tone
+    hum() {
+      if (!enabled) return;
+      const now = performance.now();
+      if (now - lastTick < 120) return;
+      lastTick = now;
+      const t = ctx.currentTime;
+      const o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = 1320;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.018, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+      o.connect(g); g.connect(reverbSend); g.connect(master);
+      o.start(t); o.stop(t + 0.4);
     },
 
     click() {
@@ -227,7 +271,7 @@ export function createSound() {
         const o = ctx.createOscillator(); o.type = "triangle"; o.frequency.value = f;
         const g = ctx.createGain();
         const s = t + i * 0.06;
-        g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(0.1, s + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, s + 0.22);
+        g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(0.07, s + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, s + 0.22);
         o.connect(g); g.connect(master); g.connect(reverbSend);
         o.start(s); o.stop(s + 0.25);
       });

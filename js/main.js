@@ -1,5 +1,5 @@
 // Insight Pros: scroll choreography, interactions, inquiry form, sound and the WebGL globe.
-import { createSound } from "./sound.js?v=20261023";
+import { createSound } from "./sound.js?v=20261023b";
 const $ = (s, c = document) => c.querySelector(s);
 const $$ = (s, c = document) => [...c.querySelectorAll(s)];
 
@@ -34,7 +34,7 @@ async function boot() {
 
   if (!reduced) {
     try {
-      const { createCore } = await import("./core.js?v=20261023");
+      const { createCore } = await import("./core.js?v=20261023b");
       core = createCore($(".stage"), { mobile: isMobile() });
     } catch (e) {
       core = null;
@@ -145,7 +145,6 @@ function setupNav(gsap, ScrollTrigger) {
   const onScroll = (y) => {
     nav.classList.toggle("is-scrolled", y > 40);
     if (root.classList.contains("menu-open")) return;
-    nav.classList.toggle("is-hidden", y > last && y > 300);
     last = y;
   };
   if (lenis) lenis.on("scroll", ({ scroll }) => onScroll(scroll));
@@ -430,7 +429,6 @@ function setupScenes(gsap, ScrollTrigger) {
 // ================================================================== Sound (off by default, toggle at the top)
 function setupSound(ScrollTrigger) {
   const sound = createSound();
-  window.__insightSound = sound;
   const btns = $$("[data-sound-toggle]");
   const KEY = "ip-sound-on";
   const render = (on) => btns.forEach((b) => {
@@ -439,8 +437,10 @@ function setupSound(ScrollTrigger) {
     b.setAttribute("aria-label", on ? "Turn sound off" : "Turn sound on");
   });
   const save = (on) => { try { localStorage.setItem(KEY, on ? "1" : "0"); } catch (e) {} };
-  const turnOn = async () => { const ok = await sound.enable(); render(ok); if (ok) save(true); track("sound_on"); };
-  const turnOff = () => { sound.disable(); render(false); save(false); track("sound_off"); };
+  let autoStart = null;
+  const clearAuto = () => { if (autoStart) { window.removeEventListener("pointerdown", autoStart); window.removeEventListener("keydown", autoStart); autoStart = null; } };
+  const turnOn = async () => { clearAuto(); render(true); const ok = await sound.enable(); if (sound.enabled) { save(true); track("sound_on"); } else render(false); };
+  const turnOff = () => { clearAuto(); sound.disable(); render(false); save(false); track("sound_off"); };
   render(false);
   btns.forEach((b) => b.addEventListener("click", () => (sound.enabled ? turnOff() : turnOn())));
 
@@ -448,12 +448,11 @@ function setupSound(ScrollTrigger) {
   let saved = null;
   try { saved = localStorage.getItem(KEY); } catch (e) {}
   if (saved === "1") {
-    const start = (e) => {
+    autoStart = (e) => {
       if (e.target.closest && e.target.closest("[data-sound-toggle]")) return;
-      window.removeEventListener("pointerdown", start); window.removeEventListener("keydown", start);
       turnOn();
     };
-    window.addEventListener("pointerdown", start); window.addEventListener("keydown", start);
+    window.addEventListener("pointerdown", autoStart); window.addEventListener("keydown", autoStart);
   }
 
   // score follows the sections and the scroll speed
@@ -463,9 +462,21 @@ function setupSound(ScrollTrigger) {
   else { let lastY = window.scrollY; window.addEventListener("scroll", () => { sound.velocity((window.scrollY - lastY) / 4); lastY = window.scrollY; }, { passive: true }); }
 
   // quiet interface sounds
-  const interactive = "a, button, summary, [role=tab], input[type=range]";
-  if (finePointer) document.addEventListener("pointerover", (e) => { const el = e.target.closest(interactive); if (el && !el.contains(e.relatedTarget)) sound.tick(); });
-  document.addEventListener("click", (e) => { const el = e.target.closest(interactive); if (el && !el.matches("[data-sound-toggle]")) sound.click(); });
+  const interactive = "a, button:not([role=tab]), summary, input[type=range]";
+  const selectable = "[role=tab], details > summary, .pcard, .scard, .acard, .wcard, .quote, .card, .dash__rows li";
+  if (finePointer) document.addEventListener("pointerover", (e) => {
+    const el = e.target.closest(interactive);
+    if (el) { if (!el.contains(e.relatedTarget)) sound.tick(); return; }
+    const box = e.target.closest(selectable);
+    if (box && !box.contains(e.relatedTarget)) sound.hum();
+  });
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-sound-toggle]")) return;
+    if (e.target.closest(selectable)) { sound.select(); return; }
+    if (e.target.closest(interactive)) sound.click();
+  });
+  // range sliders: a soft tick as the value changes
+  $$("input[type=range]").forEach((r) => r.addEventListener("input", () => sound.tick()));
 }
 
 // ================================================================== Pause / play decorative motion
