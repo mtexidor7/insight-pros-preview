@@ -1,6 +1,6 @@
 // Insight Pros: lead intake, consent-gated Retell AI callbacks and Retell webhooks.
 // Routes (bind on the production domain): POST /api/lead, POST /api/retell-webhook. Cron: pending callbacks + CRM retries.
-// Secrets (never in the browser): RETELL_API_KEY, LEAD_WEBHOOK_URL, OUTCOME_WEBHOOK_URL, TURNSTILE_SECRET, HASH_SALT.
+// Secrets (never in the browser): RETELL_API_KEY, LEAD_WEBHOOK_URL, LEAD_WEBHOOK_TOKEN, OUTCOME_WEBHOOK_URL, TURNSTILE_SECRET, HASH_SALT.
 import { validateLead, inCallingWindow, verifyRetellSignature, sha256Hex, isTrue, listOf, idemKey } from "./lib.js";
 
 const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json", ...headers } });
@@ -33,10 +33,12 @@ async function verifyTurnstile(env, token, ip) {
   return data.success === true;
 }
 
-async function forward(url, payload) {
+async function forward(url, payload, token) {
   if (!url) return "not_configured";
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["X-Insightpros-Token"] = token; // lets the n8n workflow reject anything not from this Worker
   try {
-    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(payload) });
     return res.ok ? "delivered" : "failed";
   } catch (e) {
     return "failed";
@@ -147,7 +149,7 @@ async function handleLead(request, env, ctx) {
   }
 
   // 3) hand off to the existing CRM / workflow webhook (retried by cron on failure)
-  lead.crm_status = await forward(env.LEAD_WEBHOOK_URL, { type: "lead", lead });
+  lead.crm_status = await forward(env.LEAD_WEBHOOK_URL, { type: "lead", lead }, env.LEAD_WEBHOOK_TOKEN);
   if (lead.crm_status === "failed") await env.LEADS.put("crmretry:" + lead.id, lead.id, { expirationTtl: 7 * DAY });
 
   await env.LEADS.put("lead:" + lead.id, JSON.stringify(lead));
@@ -196,7 +198,7 @@ async function handleWebhook(request, env) {
       await env.LEADS.put("lead:" + leadId, JSON.stringify(lead));
     }
   }
-  await forward(env.OUTCOME_WEBHOOK_URL, { type: "call_outcome", lead_id: leadId || null, outcome });
+  await forward(env.OUTCOME_WEBHOOK_URL, { type: "call_outcome", lead_id: leadId || null, outcome }, env.LEAD_WEBHOOK_TOKEN);
   log("webhook_processed", { event, call_id: call.call_id, lead_id: leadId || null });
   return new Response(null, { status: 204 });
 }
@@ -220,7 +222,7 @@ async function runScheduled(env, now = new Date()) {
     const stored = await env.LEADS.get("lead:" + id);
     if (!stored) { await env.LEADS.delete(name); continue; }
     const lead = JSON.parse(stored);
-    lead.crm_status = await forward(env.LEAD_WEBHOOK_URL, { type: "lead", lead });
+    lead.crm_status = await forward(env.LEAD_WEBHOOK_URL, { type: "lead", lead }, env.LEAD_WEBHOOK_TOKEN);
     if (lead.crm_status !== "failed") await env.LEADS.delete(name);
     await env.LEADS.put("lead:" + id, JSON.stringify(lead));
   }

@@ -266,6 +266,7 @@ export function setupVoiceOrb({ track = () => {} } = {}) {
           onError: (err) => {
             if (!mine()) return;
             lastError = err;
+            console.warn("Voice demo:", err?.status || err?.name || "", err?.message || err); // the service's reason, no keys
             track("demo_error_" + describe(err)[0]);
           },
           onEnd: () => {

@@ -1,4 +1,4 @@
-# Insight Pros lead + Retell callback Worker. NOT DEPLOYED. Deploy only after owner approval (see worker/README.md).
+# Insight Pros lead + Retell callback Worker. Deployed to workers.dev only (no production route). Calls OFF until approved.
 name = "insightpros-leads"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
@@ -13,7 +13,7 @@ compatibility_date = "2026-10-01"
 # Create with: npx wrangler kv namespace create LEADS   then paste the id below.
 [[kv_namespaces]]
 binding = "LEADS"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "c1bc6a532d9f466cad5776ed0250376f"
 
 # Process callbacks that arrived outside calling hours, and retry CRM delivery.
 [triggers]
@@ -21,7 +21,7 @@ crons = ["*/15 * * * *"]
 
 [vars]
 RETELL_AGENT_ID = "agent_a39dab05dd12699bb82b353df2"
-RETELL_FROM_NUMBER = ""              # Retell phone number in E.164, e.g. "+18635550123" (required for callbacks)
+RETELL_FROM_NUMBER = "+18632641714"            # Retell phone number in E.164, e.g. "+18635550123" (required for callbacks)
 ALLOWED_ORIGINS = "https://insightproexperts.com,https://www.insightproexperts.com,https://mtexidor7.github.io,http://localhost:5173"
 CONSENT_VERSION = "callback-consent-v1-2026-10-24"
 CALLBACKS_ENABLED = "false"          # master switch for outbound AI calls
@@ -35,4 +35,5 @@ CALLBACK_RATE_LIMIT = "2"            # callback requests per IP per day
 #   HASH_SALT            random string for hashing visitor IPs
 #   LEAD_WEBHOOK_URL     existing CRM/workflow inbound webhook (e.g. GoHighLevel or n8n), optional
 #   OUTCOME_WEBHOOK_URL  where call outcomes should be sent, optional
+#   LEAD_WEBHOOK_TOKEN   shared token sent as X-Insightpros-Token to the n8n workflow
 #   TURNSTILE_SECRET     Cloudflare Turnstile secret, optional (pair with turnstileSiteKey in js/config.js)
