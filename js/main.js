@@ -1,5 +1,5 @@
 // Insight Pros: scroll choreography, interactions, inquiry form, sound and the WebGL globe.
-import { createSound } from "./sound.js?v=20261025";
+import { createSound } from "./sound.js?v=20261026";
 import { SITE_CONFIG } from "./config.js?v=20261024";
 import { setupVoiceOrb } from "./voice-orb.js?v=20261024";
 const $ = (s, c = document) => c.querySelector(s);

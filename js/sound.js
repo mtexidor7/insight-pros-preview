@@ -105,9 +105,9 @@ export function createSound() {
     sub.connect(subGain).connect(master); sub.start();
 
     // beat bus: soft kick pulse, airy hats, plucked arpeggio
-    beatBus = ctx.createGain(); beatBus.gain.value = 1;
+    beatBus = ctx.createGain(); beatBus.gain.value = 3.2;
     beatBus.connect(master);
-    arpFilter = ctx.createBiquadFilter(); arpFilter.type = "lowpass"; arpFilter.frequency.value = 2400; arpFilter.Q.value = 0.6;
+    arpFilter = ctx.createBiquadFilter(); arpFilter.type = "lowpass"; arpFilter.frequency.value = 3400; arpFilter.Q.value = 0.6;
     arpFilter.connect(beatBus); arpFilter.connect(reverbSend);
     hatNoise = noiseBuffer(0.5);
 
@@ -162,22 +162,34 @@ export function createSound() {
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.11, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.38);
     o.connect(g).connect(beatBus); o.start(t); o.stop(t + 0.4);
-    // soft sidechain breath on the pad
+    // mid "body" so small speakers hear the beat
+    const b = ctx.createOscillator(); b.type = "triangle";
+    b.frequency.setValueAtTime(320, t); b.frequency.exponentialRampToValueAtTime(150, t + 0.08);
+    const bg = ctx.createGain();
+    bg.gain.setValueAtTime(0.0001, t); bg.gain.exponentialRampToValueAtTime(0.09, t + 0.004); bg.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    b.connect(bg).connect(beatBus); b.start(t); b.stop(t + 0.18);
+    // soft click on the attack
+    const c = ctx.createBufferSource(); c.buffer = hatNoise;
+    const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 1800; bp.Q.value = 0.8;
+    const cg = ctx.createGain();
+    cg.gain.setValueAtTime(0.0001, t); cg.gain.exponentialRampToValueAtTime(0.05, t + 0.002); cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+    c.connect(bp).connect(cg).connect(beatBus); c.start(t); c.stop(t + 0.04);
+    // sidechain breath on the pad
     duckGain.gain.cancelScheduledValues(t);
-    duckGain.gain.setValueAtTime(0.62, t);
+    duckGain.gain.setValueAtTime(0.38, t);
     duckGain.gain.linearRampToValueAtTime(1, t + (60 / BPM) * 0.7);
   }
   function hat(t) {
     const src = ctx.createBufferSource(); src.buffer = hatNoise;
-    const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 7500;
+    const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 5500;
     const g = ctx.createGain();
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.014, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
     src.connect(hp).connect(g).connect(beatBus); src.start(t); src.stop(t + 0.06);
   }
   function pluck(freq, t, pan) {
     const o = ctx.createOscillator(); o.type = "triangle"; o.frequency.value = freq;
     const g = ctx.createGain();
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.024, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.085, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
     let out = g;
     if (ctx.createStereoPanner) { const pn = ctx.createStereoPanner(); pn.pan.value = pan; g.connect(pn); out = pn; }
     o.connect(g); out.connect(arpFilter); o.start(t); o.stop(t + 0.45);
@@ -429,7 +441,7 @@ export function createSound() {
       padFilter.frequency.setTargetAtTime(1400 + s * 45, t, 0.25);
       airGain.gain.setTargetAtTime(0.012 + s * 0.0015, t, 0.3);
       airFilter.frequency.setTargetAtTime(2600 + s * 50, t, 0.3);
-      arpFilter.frequency.setTargetAtTime(2400 + s * 70, t, 0.3);
+      arpFilter.frequency.setTargetAtTime(3400 + s * 70, t, 0.3);
     },
 
     tick() {
