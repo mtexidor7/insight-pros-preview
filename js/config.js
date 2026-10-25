@@ -6,12 +6,20 @@ export const SITE_CONFIG = {
   leadEndpoint: "",
 
   retell: {
-    agentId: "agent_a39dab05dd12699bb82b353df2",
-    // Domain-restricted PUBLIC key from the Retell dashboard (starts with "public_key_").
-    // Allowed domains should include: insightproexperts.com, mtexidor7.github.io and localhost.
-    // Empty = the live voice demo shows a "being connected" message instead of a fake orb conversation.
+    agentId: "agent_a39dab05dd12699bb82b353df2", // Ashley
+    agentName: "Ashley",
+    // Which agent version web calls use. "latest_published" never picks up unpublished draft edits.
+    // To freeze a specific version instead, put its number here (e.g. 12).
+    agentVersion: "latest_published",
+    // Domain-restricted PUBLIC key from the Retell dashboard (starts with "public_key_"). Safe to ship to browsers.
+    // Allowed domains should include: insightproexperts.com, www.insightproexperts.com, mtexidor7.github.io and localhost.
+    // Empty = the live voice demo shows a "not connected yet" message instead of a fake orb conversation.
     publicKey: "",
-    sdkUrl: "https://esm.sh/retell-client-js-sdk@3.0.2",
+    // Google reCAPTCHA v3 SITE key, only if reCAPTCHA is turned on for the public key in Retell. Empty = off.
+    recaptchaSiteKey: "",
+    // Loaded only after the visitor presses the orb. 3.0.3 ends the call when the microphone is denied.
+    sdkUrl: "https://esm.sh/retell-client-js-sdk@3.0.3",
+    connectTimeoutMs: 25000,
   },
 
   // Cloudflare Turnstile site key (public). Empty = Turnstile not used; the Worker still applies a honeypot and rate limits.

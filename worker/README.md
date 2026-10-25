@@ -36,6 +36,7 @@ npx wrangler@3 dev --local    # runs the Worker in Cloudflare's runtime on http:
    - Buy or import an outbound phone number; put it in `RETELL_FROM_NUMBER` (E.164).
    - Create an API key with the **webhook badge**; store it as the `RETELL_API_KEY` secret.
    - Create a **public key** restricted to `insightproexperts.com`, `www.insightproexperts.com`, `mtexidor7.github.io` and `localhost`; put it in `js/config.js` → `retell.publicKey`. Optionally enable reCAPTCHA on that key.
+   - Check which agent version the orb will use (read-only, no calls): `RETELL_API_KEY=key_... node worker/scripts/check-agent.mjs`. The orb requests `agent_version: "latest_published"`, so unpublished draft edits are never used.
    - Set the agent's webhook URL to `https://insightproexperts.com/api/retell-webhook`.
    - Recommended agent changes (not made, need your approval): open outbound calls with "Hi, this is the AI assistant for Insight Pros. You requested a call about {{service_interest}}. Is now still a good time?"; add post-call analysis fields `opt_out` (boolean), `appointment_requested` (boolean), `human_follow_up` (boolean); use `{{customer_name}}`, `{{business_name}}`, `{{service_interest}}`.
 2. **Cloudflare**
