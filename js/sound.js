@@ -20,6 +20,9 @@ const CHORDS = {
 export function createSound() {
   let ctx = null;
   const MULT = [1, 2, 2, 2];
+  const BPM = 100;                 // tempo of the gentle pulse
+  const ARP = [1, 2, 3, 2, 1, 3, 2, 3]; // chord-tone pattern on 8th notes
+  let duckGain, beatBus, arpFilter, hatNoise, schedTimer = null, nextBeat = 0, step8 = 0;
   const MASTER = 0.45; // overall volume (0 to 1)
   let token = 0;     // guards against an 'off' click while sound is still starting
   let shimmerGain, shimmer = [];
@@ -65,7 +68,8 @@ export function createSound() {
     // pad
     padFilter = ctx.createBiquadFilter(); padFilter.type = "lowpass"; padFilter.frequency.value = 1400; padFilter.Q.value = 0.7;
     padGain = ctx.createGain(); padGain.gain.value = 0.2;
-    padFilter.connect(padGain);
+    duckGain = ctx.createGain(); duckGain.gain.value = 1; // pad 'breathes' on each beat
+    padFilter.connect(duckGain).connect(padGain);
     padGain.connect(master);
     padGain.connect(reverbSend);
 
@@ -77,8 +81,8 @@ export function createSound() {
       let f = f0;
       const g = ctx.createGain(); g.gain.value = i === 0 ? 0.3 : 0.24;
       f = f * MULT[i];
-      const a = ctx.createOscillator(); a.type = "sawtooth"; a.frequency.value = f; a.detune.value = -7;
-      const b = ctx.createOscillator(); b.type = "triangle"; b.frequency.value = f; b.detune.value = 6;
+      const a = ctx.createOscillator(); a.type = "triangle"; a.frequency.value = f; a.detune.value = -5;
+      const b = ctx.createOscillator(); b.type = "sine"; b.frequency.value = f; b.detune.value = 5;
       const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
       a.connect(g); b.connect(g);
       if (pan) { pan.pan.value = [-0.5, 0.4, -0.2, 0.55][i]; g.connect(pan).connect(padFilter); } else g.connect(padFilter);
@@ -86,7 +90,7 @@ export function createSound() {
       voices.push({ a, b });
     });
 
-    shimmerGain = ctx.createGain(); shimmerGain.gain.value = 0.022;
+    shimmerGain = ctx.createGain(); shimmerGain.gain.value = 0.012;
     const trem = ctx.createOscillator(); trem.frequency.value = 0.18;
     const tremDepth = ctx.createGain(); tremDepth.gain.value = 0.012;
     trem.connect(tremDepth).connect(shimmerGain.gain); trem.start();
@@ -99,6 +103,13 @@ export function createSound() {
     sub = ctx.createOscillator(); sub.type = "sine"; sub.frequency.value = CHORDS.hero[0];
     const subGain = ctx.createGain(); subGain.gain.value = 0.045;
     sub.connect(subGain).connect(master); sub.start();
+
+    // beat bus: soft kick pulse, airy hats, plucked arpeggio
+    beatBus = ctx.createGain(); beatBus.gain.value = 1;
+    beatBus.connect(master);
+    arpFilter = ctx.createBiquadFilter(); arpFilter.type = "lowpass"; arpFilter.frequency.value = 2400; arpFilter.Q.value = 0.6;
+    arpFilter.connect(beatBus); arpFilter.connect(reverbSend);
+    hatNoise = noiseBuffer(0.5);
 
     // air: soft filtered noise that rises with scroll speed
     const air = ctx.createBufferSource(); air.buffer = noiseBuffer(3); air.loop = true;
@@ -143,6 +154,54 @@ export function createSound() {
     g.connect(master); g.connect(reverbSend);
     src.start(t); src.stop(t + 1.6);
   }
+
+  // ------------------------------------------------------------ modern ambient pulse (lookahead scheduler)
+  function kick(t) {
+    const o = ctx.createOscillator(); o.type = "sine";
+    o.frequency.setValueAtTime(130, t); o.frequency.exponentialRampToValueAtTime(52, t + 0.12);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.11, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.38);
+    o.connect(g).connect(beatBus); o.start(t); o.stop(t + 0.4);
+    // soft sidechain breath on the pad
+    duckGain.gain.cancelScheduledValues(t);
+    duckGain.gain.setValueAtTime(0.62, t);
+    duckGain.gain.linearRampToValueAtTime(1, t + (60 / BPM) * 0.7);
+  }
+  function hat(t) {
+    const src = ctx.createBufferSource(); src.buffer = hatNoise;
+    const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 7500;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.014, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    src.connect(hp).connect(g).connect(beatBus); src.start(t); src.stop(t + 0.06);
+  }
+  function pluck(freq, t, pan) {
+    const o = ctx.createOscillator(); o.type = "triangle"; o.frequency.value = freq;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.024, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+    let out = g;
+    if (ctx.createStereoPanner) { const pn = ctx.createStereoPanner(); pn.pan.value = pan; g.connect(pn); out = pn; }
+    o.connect(g); out.connect(arpFilter); o.start(t); o.stop(t + 0.45);
+  }
+  function scheduleBeats() {
+    const eighth = 60 / BPM / 2;
+    while (nextBeat < ctx.currentTime + 0.15) {
+      const t = nextBeat;
+      if (!ringing) { // let the phone ringtone play on its own
+        const chord = CHORDS[section] || CHORDS.hero;
+        if (step8 % 2 === 0) kick(t); else hat(t);
+        const idx = ARP[step8 % ARP.length];
+        pluck(chord[idx] * MULT[idx] * 2, t, step8 % 2 ? 0.35 : -0.35);
+      }
+      step8 = (step8 + 1) % 64;
+      nextBeat += eighth;
+    }
+  }
+  function startBeats() {
+    if (schedTimer) return;
+    nextBeat = ctx.currentTime + 0.4; step8 = 0;
+    schedTimer = setInterval(scheduleBeats, 25);
+  }
+  function stopBeats() { clearInterval(schedTimer); schedTimer = null; }
 
   // rapid rising digital arpeggio, like a HUD scanning in
   function scan(chord) {
@@ -311,6 +370,7 @@ export function createSound() {
       whoosh(1);
       chime(CHORDS[section][3] * 2, 0.06);
       scan(CHORDS[section]);
+      startBeats();
       return true;
     },
 
@@ -321,6 +381,7 @@ export function createSound() {
       wtStep = -1;
       enabled = false;
       if (!ctx) return;
+      stopBeats();
       const t = ctx.currentTime;
       master.gain.cancelScheduledValues(t);
       master.gain.setValueAtTime(master.gain.value, t);
@@ -368,6 +429,7 @@ export function createSound() {
       padFilter.frequency.setTargetAtTime(1400 + s * 45, t, 0.25);
       airGain.gain.setTargetAtTime(0.012 + s * 0.0015, t, 0.3);
       airFilter.frequency.setTargetAtTime(2600 + s * 50, t, 0.3);
+      arpFilter.frequency.setTargetAtTime(2400 + s * 70, t, 0.3);
     },
 
     tick() {
