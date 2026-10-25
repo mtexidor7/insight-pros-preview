@@ -13,7 +13,7 @@ Status: **ready for preview review. Not ready for production** until the items m
 | 5 | Ongoing support packages | Shown only as "agreed ongoing support" | Confirm scope |
 | 6 | Larger organization projects | Audience card uses the doc's wording, no claims of scale or certifications | Confirm |
 | 7 | Published work samples | Website example = this site. Communication and dashboard examples are labeled demonstrations with sample data | Add real, permitted projects when available |
-| 8 | Client testimonials and permission | Three quotes shown verbatim from insightproexperts.com | **Confirm permission** |
+| 8 | Client testimonials and permission | Removed from the page at owner request (Oct 2026) | None needed |
 | 9 | Booking platform and URL | https://calendly.com/jemst-consulting-info/30min (from the existing site) | Confirm a full test booking completes |
 | 10 | Inquiry form destination | **Not connected.** Form validates and shows a clear "not sent" message with phone, email and booking options | **BLOCKER** |
 | 11 | Official contact details | Phone 863-259-3434, info@jemst-consulting.com | Confirm |
