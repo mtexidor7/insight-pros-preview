@@ -1,0 +1,38 @@
+# Insight Pros lead + Retell callback Worker. NOT DEPLOYED. Deploy only after owner approval (see worker/README.md).
+name = "insightpros-leads"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# Bind to the production site once approved (example, keep commented until then):
+# routes = [
+#   { pattern = "insightproexperts.com/api/lead", zone_name = "insightproexperts.com" },
+#   { pattern = "insightproexperts.com/api/retell-webhook", zone_name = "insightproexperts.com" },
+# ]
+
+# Lead storage, idempotency, rate limits, opt-out list, pending callbacks.
+# Create with: npx wrangler kv namespace create LEADS   then paste the id below.
+[[kv_namespaces]]
+binding = "LEADS"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Process callbacks that arrived outside calling hours, and retry CRM delivery.
+[triggers]
+crons = ["*/15 * * * *"]
+
+[vars]
+RETELL_AGENT_ID = "agent_a39dab05dd12699bb82b353df2"
+RETELL_FROM_NUMBER = ""              # Retell phone number in E.164, e.g. "+18635550123" (required for callbacks)
+ALLOWED_ORIGINS = "https://insightproexperts.com,https://www.insightproexperts.com,https://mtexidor7.github.io,http://localhost:5173"
+CONSENT_VERSION = "callback-consent-v1-2026-10-24"
+CALLBACKS_ENABLED = "false"          # master switch for outbound AI calls
+TEST_MODE = "true"                   # while true, calls ONLY numbers listed in TEST_ALLOWED_NUMBERS
+TEST_ALLOWED_NUMBERS = ""            # comma-separated E.164 test numbers you own
+LEAD_RATE_LIMIT = "6"                # inquiries per IP per hour
+CALLBACK_RATE_LIMIT = "2"            # callback requests per IP per day
+
+# Secrets (set with `npx wrangler secret put NAME`, never commit):
+#   RETELL_API_KEY       Retell API key WITH the webhook badge (used for calls and webhook signature checks)
+#   HASH_SALT            random string for hashing visitor IPs
+#   LEAD_WEBHOOK_URL     existing CRM/workflow inbound webhook (e.g. GoHighLevel or n8n), optional
+#   OUTCOME_WEBHOOK_URL  where call outcomes should be sent, optional
+#   TURNSTILE_SECRET     Cloudflare Turnstile secret, optional (pair with turnstileSiteKey in js/config.js)

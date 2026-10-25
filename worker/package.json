@@ -1,0 +1,9 @@
+{
+  "name": "insightpros-leads-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/worker.test.mjs",
+    "dev": "npx wrangler@3 dev --local"
+  }
+}

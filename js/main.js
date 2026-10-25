@@ -1,5 +1,7 @@
 // Insight Pros: scroll choreography, interactions, inquiry form, sound and the WebGL globe.
-import { createSound } from "./sound.js?v=20261023c";
+import { createSound } from "./sound.js?v=20261024";
+import { SITE_CONFIG } from "./config.js?v=20261024";
+import { setupVoiceOrb } from "./voice-orb.js?v=20261024";
 const $ = (s, c = document) => c.querySelector(s);
 const $$ = (s, c = document) => [...c.querySelectorAll(s)];
 
@@ -66,6 +68,8 @@ async function boot() {
   setupForm();
   setupMotionToggle();
   setupSound(ScrollTrigger);
+  setupVoiceOrb({ track });
+  setupPromo();
   $$("[data-track]").forEach((el) => el.addEventListener("click", () => track(el.dataset.track, { location: el.closest("section")?.id || "nav" })));
 
   await runLoader(gsap);
@@ -458,6 +462,11 @@ function setupSound(ScrollTrigger) {
   // score follows the sections and the scroll speed
   [["#top", "hero"], ["#problems", "problems"], ["#services", "services"], ["#audience", "audience"], ["#work", "work"], ["#walkthrough", "walkthrough"], ["#estimate", "estimate"], ["#about", "about"], ["#process", "process"], ["#search", "search"], ["#faq", "faq"], ["#contact", "contact"]]
     .forEach(([sel, key]) => ScrollTrigger.create({ trigger: sel, start: "top 55%", end: "bottom 55%", onToggle: (self) => self.isActive && sound.section(key) }));
+  // live voice demo: switch the site sound off for the call, restore it afterwards
+  let resumeAfterCall = false;
+  window.addEventListener("ip-voice-start", () => { if (sound.enabled) { resumeAfterCall = true; sound.disable(); render(false); } });
+  window.addEventListener("ip-voice-end", () => { if (resumeAfterCall) { resumeAfterCall = false; turnOn(); } });
+
   // phone walkthrough: ring as the section arrives, then follow the scroll-scrubbed steps
   let wtIn = false, wtP = 0;
   window.addEventListener("ip-sound-resync", () => wtUpdate());
@@ -505,18 +514,36 @@ function setupMotionToggle() {
 }
 
 // ================================================================== Project inquiry form
+// US/E.164 phone normalization (same rules as the Worker): returns "+1XXXXXXXXXX" or "".
+function toE164(raw) {
+  const v = String(raw || "").trim();
+  if (!v) return "";
+  if (v.startsWith("+")) { const d = "+" + v.slice(1).replace(/\D/g, ""); return /^\+[1-9]\d{7,14}$/.test(d) ? d : ""; }
+  let d = v.replace(/\D/g, "");
+  if (d.length === 11 && d.startsWith("1")) d = d.slice(1);
+  return /^[2-9]\d{2}[2-9]\d{6}$/.test(d) ? "+1" + d : "";
+}
+
 function setupForm() {
   const form = $("#inquiry");
   const submit = $(".inquiry__submit", form);
   const label = $(".inquiry__label", form);
   const status = $(".inquiry__status", form);
+  const callbackBox = $("#f-callback");
+  const phoneOpt = $("[data-phone-opt]");
   let sending = false;
+  let requestId = null; // reused for retries of the same submission so the server can de-duplicate
 
   const rules = {
     name: (v) => (v.trim().length >= 2 ? "" : "Please enter your name."),
     business: (v) => (v.trim().length >= 2 ? "" : "Please enter your business name."),
     email: (v) => (/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim()) ? "" : "Please enter a valid email address, like name@business.com."),
     service: (v) => (v ? "" : "Please choose what you would like help with."),
+    phone: (v) => {
+      if (!callbackBox.checked) return v.trim() && !toE164(v) ? "Please enter a valid phone number, or leave it blank." : "";
+      if (!v.trim()) return "Please enter the phone number we should call.";
+      return toE164(v) ? "" : "Please enter a valid US phone number, like 863-259-3434.";
+    },
   };
   const check = (name) => {
     const el = form.elements[name];
@@ -528,12 +555,28 @@ function setupForm() {
   Object.keys(rules).forEach((n) => {
     const el = form.elements[n];
     el.addEventListener("blur", () => { if (el.value) check(n); });
-    el.addEventListener("input", () => { if (el.getAttribute("aria-invalid") === "true") check(n); });
-    el.addEventListener("change", () => { if (el.getAttribute("aria-invalid") === "true") check(n); });
+    el.addEventListener("input", () => { requestId = null; if (el.getAttribute("aria-invalid") === "true") check(n); });
+    el.addEventListener("change", () => { requestId = null; if (el.getAttribute("aria-invalid") === "true") check(n); });
   });
+  callbackBox.addEventListener("change", () => {
+    requestId = null;
+    phoneOpt.textContent = callbackBox.checked ? "(required for the call)" : "(optional)";
+    form.elements.phone.required = callbackBox.checked;
+    if (form.elements.phone.getAttribute("aria-invalid") === "true" || callbackBox.checked) { if (form.elements.phone.value || !callbackBox.checked) check("phone"); }
+  });
+
+  // campaign context captured once per visit
+  const params = new URLSearchParams(location.search);
+  const context = { page: location.pathname, referrer: document.referrer ? new URL(document.referrer).hostname : "" };
+  ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "fbclid"].forEach((k) => { if (params.get(k)) context[k] = params.get(k).slice(0, 200); });
 
   const setStatus = (html, kind) => { status.className = "inquiry__status" + (kind ? " is-" + kind : ""); status.innerHTML = html; };
   const fallback = 'Please <a href="https://calendly.com/jemst-consulting-info/30min" target="_blank" rel="noopener">book a free consultation</a>, call <a href="tel:+18632593434">863-259-3434</a> or email <a href="mailto:info@jemst-consulting.com">info@jemst-consulting.com</a>.';
+  const callbackMessages = {
+    queued: " You asked for a call, so our AI assistant will call you shortly at the number you provided.",
+    scheduled: " You asked for a call. It is outside our calling hours right now, so our AI assistant will call during the next calling window.",
+    not_placed: " We could not schedule the automated call, so a member of our team will follow up instead.",
+  };
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -546,8 +589,7 @@ function setupForm() {
       return;
     }
     if (form.elements.company_website.value) return; // spam trap filled: drop silently
-    const endpoint = (form.dataset.endpoint || "").trim();
-
+    const endpoint = (SITE_CONFIG.leadEndpoint || form.dataset.endpoint || "").trim();
     if (!endpoint) {
       // No approved delivery destination is connected yet. Never show success without a real submission.
       setStatus("Online inquiries are not connected yet, so this message was not sent. " + fallback, "err");
@@ -560,17 +602,35 @@ function setupForm() {
     submit.classList.add("is-loading");
     label.textContent = "Sending";
     setStatus("", "");
-    const data = Object.fromEntries(new FormData(form).entries());
-    delete data.company_website;
+    requestId = requestId || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
+    const wantsCall = callbackBox.checked;
+    const data = {
+      request_id: requestId,
+      name: form.elements.name.value.trim(),
+      business: form.elements.business.value.trim(),
+      email: form.elements.email.value.trim(),
+      service: form.elements.service.value,
+      phone: toE164(form.elements.phone.value),
+      website: form.elements.website.value.trim(),
+      callback_requested: wantsCall,
+      callback_consent: wantsCall ? { given: true, version: SITE_CONFIG.callbackConsent.version, text: $("#f-callback-desc").textContent.trim(), at: new Date().toISOString() } : null,
+      context,
+      turnstile_token: form.elements["cf-turnstile-response"]?.value || "",
+    };
     const ctrl = new AbortController();
     const timeout = setTimeout(() => ctrl.abort(), 15000);
     try {
       const res = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(data), signal: ctrl.signal });
-      if (!res.ok) throw new Error("HTTP " + res.status);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body.ok) throw new Error(body.error || "HTTP " + res.status);
       form.reset();
+      requestId = null;
+      phoneOpt.textContent = "(optional)";
       Object.keys(rules).forEach((n) => form.elements[n].removeAttribute("aria-invalid"));
-      setStatus("Thank you. Your inquiry was received and we will reply by email.", "ok");
+      const cb = wantsCall ? (callbackMessages[body.callback] || callbackMessages.not_placed) : "";
+      setStatus("Thank you. Your inquiry was received and we will reply by email." + cb, "ok");
       track("inquiry_accepted", { service: data.service });
+      if (wantsCall) track(body.callback === "queued" || body.callback === "scheduled" ? "callback_request" : "callback_not_placed");
     } catch (err) {
       setStatus("Your inquiry could not be sent. Please try again in a moment. " + fallback, "err");
       track("inquiry_failed");
@@ -583,6 +643,17 @@ function setupForm() {
       status.focus?.();
     }
   });
+}
+
+// Approved promotion only: shows when enabled AND today is inside the configured dates.
+function setupPromo() {
+  const el = $("[data-promo]");
+  const p = SITE_CONFIG.promo;
+  if (!el || !p || !p.enabled || !p.text || !p.start || !p.end) return;
+  const now = Date.now(), s = Date.parse(p.start), e = Date.parse(p.end);
+  if (!(now >= s && now <= e)) return;
+  el.textContent = p.text;
+  el.hidden = false;
 }
 
 boot();
